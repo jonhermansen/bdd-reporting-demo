@@ -137,9 +137,6 @@ jobs:
         with:
           name: reporter-dist
           path: packages/cucumber-ctrf-json-reporter/dist/
-        with:
-          name: reporter-dist
-          path: packages/cucumber-ctrf-json-reporter/dist/
       - name: Start postgres
         run: docker compose up -d postgres --wait
       - name: Start backend
