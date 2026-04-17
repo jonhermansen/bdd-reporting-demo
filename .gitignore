@@ -1,5 +1,14 @@
 node_modules/
 reports/
 dist/
+target/
+project/target/
+project/project/
+**/.vite/
+**/dist/
 *.log
 .DS_Store
+.bsp/
+.metals/
+test-results/
+playwright-report/

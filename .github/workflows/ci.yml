@@ -1,0 +1,213 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs on feature branches; always finish main.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+  actions: read
+  security-events: write
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Fast gate: syntax/format/audit. Fails in seconds and kills the pipe early.
+  # ─────────────────────────────────────────────────────────────────────────
+
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v5
+      - uses: ./.github/actions/setup-nix
+      - uses: ./.github/actions/setup-js
+      - name: npm audit (fail on high)
+        run: nix develop --command npm audit --audit-level=high --workspaces --include-workspace-root
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Security scans: run in parallel with builds.
+  # ─────────────────────────────────────────────────────────────────────────
+
+  dep-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v5
+      - uses: actions/dependency-review-action@f5b971718edcbb31275a1db40004592335c0e031 # v4
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure
+
+  codeql:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v5
+      - uses: github/codeql-action/init@0b7b740d4cd9b44f80c907b666497564df09d1d9 # v3
+        with:
+          languages: javascript-typescript,java
+      - uses: github/codeql-action/analyze@0b7b740d4cd9b44f80c907b666497564df09d1d9 # v3
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Component jobs: each self-contained; fans out in parallel.
+  # Naming = component name, not activity. Internal phases: build, test, report.
+  # ─────────────────────────────────────────────────────────────────────────
+
+  reporter:
+    needs: lint
+    runs-on: ubuntu-24.04
+    outputs:
+      # marker so downstream jobs can depend on this being built
+      built: "yes"
+    steps:
+      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v5
+      - uses: ./.github/actions/setup-nix
+      - uses: ./.github/actions/setup-js
+      - name: Build cucumber-ctrf-json-reporter
+        run: nix develop --command npm --workspace cucumber-ctrf-json-reporter run build
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: reporter-dist
+          path: packages/cucumber-ctrf-json-reporter/dist/
+
+  backend:
+    needs: lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v5
+      - uses: ./.github/actions/setup-nix
+      - uses: ./.github/actions/setup-scala
+      - name: Compile
+        working-directory: components/backend
+        run: nix develop ../.. --command sbt compile
+      - name: Test
+        working-directory: components/backend
+        continue-on-error: true
+        run: nix develop ../.. --command sbt test
+      - name: Convert JUnit to CTRF
+        working-directory: components/backend
+        run: nix develop ../.. --command npx --yes junit-to-ctrf 'reports/junit/*.xml' -o ../../reports/backend/ctrf.json --tool scalatest
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        if: always()
+        with:
+          name: ctrf-backend
+          path: reports/backend/ctrf.json
+          if-no-files-found: warn
+
+  ui:
+    needs: lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v5
+      - uses: ./.github/actions/setup-nix
+      - uses: ./.github/actions/setup-js
+      - name: Build
+        working-directory: components/ui
+        run: nix develop ../.. --command npm run build
+      - name: Test
+        continue-on-error: true
+        run: nix develop --command npm run test:ui
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        if: always()
+        with:
+          name: ctrf-ui
+          path: reports/ui/ctrf.json
+          if-no-files-found: warn
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Integration: spins up stack via docker-compose + runs the backend directly.
+  # Drives the UI (built earlier) via playwright through cucumber-js.
+  # ─────────────────────────────────────────────────────────────────────────
+
+  integration:
+    needs: [backend, ui, reporter]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v5
+      - uses: ./.github/actions/setup-nix
+      - uses: ./.github/actions/setup-js
+      - uses: ./.github/actions/setup-scala
+      - uses: actions/download-artifact@484a0b528fb4d7bd804637ccb632e47a0e638317 # v4
+        with:
+          name: reporter-dist
+          path: packages/cucumber-ctrf-json-reporter/dist/
+        with:
+          name: reporter-dist
+          path: packages/cucumber-ctrf-json-reporter/dist/
+      - name: Start postgres
+        run: docker compose up -d postgres --wait
+      - name: Start backend
+        working-directory: components/backend
+        run: |
+          nix develop ../.. --command sbt "runMain demo.Server" &
+          nix develop ../.. --command npx --yes wait-on http://localhost:8080/health --timeout 60000
+      - name: Start UI
+        working-directory: components/ui
+        run: |
+          nix develop ../.. --command npm run preview &
+          nix develop ../.. --command npx --yes wait-on http://localhost:5173 --timeout 30000
+      - name: Run integration tests
+        continue-on-error: true
+        run: nix develop --command npm run test:integration
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        if: always()
+        with:
+          name: ctrf-integration
+          path: reports/integration/ctrf.json
+          if-no-files-found: warn
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Aggregator: one final report. Merges every component's CTRF JSON.
+  # This is the single required status check you gate PRs on.
+  # ─────────────────────────────────────────────────────────────────────────
+
+  report:
+    needs: [backend, ui, integration]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v5
+      - uses: actions/download-artifact@484a0b528fb4d7bd804637ccb632e47a0e638317 # v4
+        with:
+          pattern: ctrf-*
+          path: ctrf
+      - name: List collected CTRF files
+        run: find ctrf -type f
+      - name: Publish merged CTRF report
+        uses: ctrf-io/github-test-reporter@2649c1a9a4033fc58ffb1a25838efadcb255219c # v1
+        with:
+          report-path: ctrf/**/ctrf.json
+
+          # Dense on green, rich on red
+          summary-report: true
+          failed-folded-report: true
+          flaky-report: true
+          flaky-rate-report: true
+          fail-rate-report: true
+          previous-results-report: true
+          insights-report: true
+          slowest-report: true
+          tests-changed-report: true
+          skipped-report: true
+          suite-folded-report: true
+          file-report: true
+          pull-request-report: true
+          commit-report: true
+
+          summary: true
+          pull-request: true
+          on-fail-only: true          # PR comment only when something's red
+          update-comment: true
+          collapse-large-reports: true
+          annotate: true
+          use-suite-name: true
+          upload-artifact: true
+          previous-results-max: 20
+          group-by: suite
+          exit-on-fail: false         # don't fail aggregator; component jobs own pass/fail

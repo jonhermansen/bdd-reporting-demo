@@ -1,0 +1,12 @@
+default:
+  paths: ["features/"]
+  import: ["steps/**/*.ts"]
+  loader: ["ts-node/esm"]
+  retry: 2
+  retryTagFilter: "@flaky"
+  format:
+    - summary
+    - "junit:../../reports/integration/junit.xml"
+    - "cucumber-ctrf-json-reporter:../../reports/integration/ctrf.json"
+  formatOptions:
+    snippetInterface: async-await

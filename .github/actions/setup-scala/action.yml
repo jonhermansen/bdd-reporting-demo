@@ -1,0 +1,13 @@
+name: Setup Scala
+description: Restore sbt/coursier caches. Assumes setup-nix ran earlier.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v4
+      with:
+        path: |
+          ~/.sbt
+          ~/.cache/coursier
+        key: sbt-${{ runner.os }}-${{ hashFiles('**/build.sbt', '**/project/build.properties', '**/project/plugins.sbt') }}
+        restore-keys: sbt-${{ runner.os }}-
