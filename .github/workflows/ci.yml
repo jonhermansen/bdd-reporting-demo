@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v5
       - uses: github/codeql-action/init@0b7b740d4cd9b44f80c907b666497564df09d1d9 # v3
         with:
-          languages: javascript-typescript,java
+          languages: javascript-typescript,actions
       - uses: github/codeql-action/analyze@0b7b740d4cd9b44f80c907b666497564df09d1d9 # v3
 
   # ─────────────────────────────────────────────────────────────────────────
