@@ -175,7 +175,9 @@ jobs:
           pattern: ctrf-*
           path: ctrf
       - name: List collected CTRF files
-        run: find ctrf -type f
+        run: |
+          mkdir -p ctrf
+          find ctrf -type f | tee $GITHUB_STEP_SUMMARY
       - name: Publish merged CTRF report
         uses: ctrf-io/github-test-reporter@2649c1a9a4033fc58ffb1a25838efadcb255219c # v1
         with:
