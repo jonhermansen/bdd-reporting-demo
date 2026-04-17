@@ -1,0 +1,34 @@
+{
+  "name": "cucumber-ctrf-json-reporter",
+  "version": "0.1.0",
+  "description": "A cucumber-js formatter that emits CTRF JSON test results",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "prepare": "tsc"
+  },
+  "keywords": [
+    "ctrf",
+    "common-test-report-format",
+    "cucumber",
+    "cucumber-js",
+    "cucumber-reporter",
+    "test-reporting",
+    "json"
+  ],
+  "peerDependencies": {
+    "@cucumber/cucumber": ">=11"
+  },
+  "dependencies": {
+    "ctrf": "^0.2.0"
+  },
+  "devDependencies": {
+    "@cucumber/cucumber": "^12.2.0",
+    "@cucumber/messages": "^27.0.0",
+    "@types/node": "^24.3.0",
+    "typescript": "^5.8.3"
+  }
+}
