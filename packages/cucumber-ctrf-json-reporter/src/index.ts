@@ -160,6 +160,10 @@ export default class CtrfFormatter extends Formatter {
       filePath: acc.pickle.uri,
     };
 
+    // CTRF_SUITE lets the same scenarios run multiple times in one job
+    // (e.g. pre-/post-upgrade) without colliding in the merged report.
+    if (process.env.CTRF_SUITE) test.suite = [process.env.CTRF_SUITE];
+
     if (finalStatus === "failed") {
       if (rollup.message) test.message = rollup.message;
       if (rollup.trace) test.trace = rollup.trace;

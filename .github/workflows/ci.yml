@@ -25,7 +25,7 @@ jobs:
   lint:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v5
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/setup-nix
       - uses: ./.github/actions/setup-js
       - name: npm audit (fail on high)
@@ -39,8 +39,8 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v5
-      - uses: actions/dependency-review-action@f5b971718edcbb31275a1db40004592335c0e031 # v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
         with:
           fail-on-severity: high
           comment-summary-in-pr: on-failure
@@ -48,11 +48,11 @@ jobs:
   codeql:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v5
-      - uses: github/codeql-action/init@0b7b740d4cd9b44f80c907b666497564df09d1d9 # v3
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: github/codeql-action/init@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4.35.2
         with:
           languages: javascript-typescript,actions
-      - uses: github/codeql-action/analyze@0b7b740d4cd9b44f80c907b666497564df09d1d9 # v3
+      - uses: github/codeql-action/analyze@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4.35.2
 
   # ─────────────────────────────────────────────────────────────────────────
   # Component jobs: each self-contained; fans out in parallel.
@@ -66,12 +66,12 @@ jobs:
       # marker so downstream jobs can depend on this being built
       built: "yes"
     steps:
-      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v5
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/setup-nix
       - uses: ./.github/actions/setup-js
       - name: Build cucumber-ctrf-json-reporter
         run: nix develop --command npm --workspace cucumber-ctrf-json-reporter run build
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: reporter-dist
           path: packages/cucumber-ctrf-json-reporter/dist/
@@ -80,7 +80,7 @@ jobs:
     needs: lint
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v5
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/setup-nix
       - uses: ./.github/actions/setup-scala
       - name: Compile
@@ -93,7 +93,7 @@ jobs:
       - name: Convert JUnit to CTRF
         working-directory: components/backend
         run: nix develop ../.. --command npx --yes junit-to-ctrf 'reports/junit/*.xml' -o ../../reports/backend/ctrf.json --tool scalatest
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: ctrf-backend
@@ -104,7 +104,7 @@ jobs:
     needs: lint
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v5
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/setup-nix
       - uses: ./.github/actions/setup-js
       - name: Build
@@ -113,7 +113,7 @@ jobs:
       - name: Test
         continue-on-error: true
         run: nix develop --command npm run test:ui
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: ctrf-ui
@@ -129,11 +129,11 @@ jobs:
     needs: [backend, ui, reporter]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v5
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/setup-nix
       - uses: ./.github/actions/setup-js
       - uses: ./.github/actions/setup-scala
-      - uses: actions/download-artifact@484a0b528fb4d7bd804637ccb632e47a0e638317 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: reporter-dist
           path: packages/cucumber-ctrf-json-reporter/dist/
@@ -149,14 +149,34 @@ jobs:
         run: |
           nix develop ../.. --command npm run preview &
           nix develop ../.. --command npx --yes wait-on http://localhost:5173 --timeout 30000
-      - name: Run integration tests
+      # Migration-pattern reporting: run the same suite twice, once before
+      # and once after a (placeholder) upgrade, so the merged report can show
+      # pre/post side-by-side AND each phase gets its own history stream.
+      - name: Run integration tests (pre-upgrade)
         continue-on-error: true
+        env:
+          CTRF_SUITE: pre-upgrade
         run: nix develop --command npm run test:integration
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+      # Rename in its own step so cucumber's exit-1 on test failure doesn't
+      # short-circuit the bash before the mv lands.
+      - name: Stash pre-upgrade CTRF
+        if: always()
+        run: mv reports/integration/ctrf.json reports/integration/ctrf.pre.json
+      - name: Simulated upgrade
+        run: echo "pretend-upgrade: would migrate schema / swap binaries here"
+      - name: Run integration tests (post-upgrade)
+        continue-on-error: true
+        env:
+          CTRF_SUITE: post-upgrade
+        run: nix develop --command npm run test:integration
+      - name: Stash post-upgrade CTRF
+        if: always()
+        run: mv reports/integration/ctrf.json reports/integration/ctrf.post.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: ctrf-integration
-          path: reports/integration/ctrf.json
+          path: reports/integration/ctrf.*.json
           if-no-files-found: warn
 
   # ─────────────────────────────────────────────────────────────────────────
@@ -169,8 +189,8 @@ jobs:
     if: always()
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v5
-      - uses: actions/download-artifact@484a0b528fb4d7bd804637ccb632e47a0e638317 # v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: ctrf-*
           path: ctrf
@@ -179,11 +199,13 @@ jobs:
           mkdir -p ctrf
           find ctrf -type f | tee "$GITHUB_STEP_SUMMARY"
       - name: Publish merged CTRF report
-        uses: ctrf-io/github-test-reporter@2649c1a9a4033fc58ffb1a25838efadcb255219c # v1
+        uses: ctrf-io/github-test-reporter@0f299074936c32ccaab5be5230511f6b2b9080aa # v1.0.28
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          report-path: ctrf/**/ctrf.json
+          # ctrf*.json picks up backend/ui ctrf.json plus integration's
+          # ctrf.pre.json + ctrf.post.json from the migration pattern.
+          report-path: ctrf/**/ctrf*.json
 
           # Dense on green, rich on red
           summary-report: true
@@ -218,3 +240,55 @@ jobs:
           previous-results-max: 20
           group-by: suite
           exit-on-fail: false         # don't fail aggregator; component jobs own pass/fail
+
+      # ─────────────────────────────────────────────────────────────────
+      # Per-phase history streams: identical action, distinct artifact-name
+      # so each phase accumulates its own multi-run trend (Insights p95,
+      # flaky rate, fail rate). Lets us spot regressions that only appear
+      # post-upgrade. Each invocation has its own upload artifact bucket.
+      # ─────────────────────────────────────────────────────────────────
+      - name: Pre-upgrade history stream
+        if: always()
+        uses: ctrf-io/github-test-reporter@0f299074936c32ccaab5be5230511f6b2b9080aa # v1.0.28
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          report-path: ctrf/**/ctrf.pre.json
+          artifact-name: ctrf-report-pre
+          summary-report: true
+          insights-report: true
+          previous-results-report: true
+          slowest-report: true
+          flaky-rate-report: true
+          fail-rate-report: true
+          ai-report: false
+          ai-summary-report: false
+          summary: true
+          pull-request: false
+          annotate: false
+          upload-artifact: true
+          previous-results-max: 20
+          exit-on-fail: false
+
+      - name: Post-upgrade history stream
+        if: always()
+        uses: ctrf-io/github-test-reporter@0f299074936c32ccaab5be5230511f6b2b9080aa # v1.0.28
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          report-path: ctrf/**/ctrf.post.json
+          artifact-name: ctrf-report-post
+          summary-report: true
+          insights-report: true
+          previous-results-report: true
+          slowest-report: true
+          flaky-rate-report: true
+          fail-rate-report: true
+          ai-report: false
+          ai-summary-report: false
+          summary: true
+          pull-request: false
+          annotate: false
+          upload-artifact: true
+          previous-results-max: 20
+          exit-on-fail: false
