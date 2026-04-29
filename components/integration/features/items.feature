@@ -1,6 +1,7 @@
 Feature: Items end-to-end
-  Drives the UI via Playwright, which hits the Scala backend.
-  Validates the full stack in one pass.
+  Synthetic scenarios used to exercise the CTRF reporter pipeline. Step
+  implementations are mocked (jittered durations, occasional simulated
+  failures) — no real services are driven.
 
   @smoke
   Scenario: Backend health check
@@ -47,3 +48,15 @@ Feature: Items end-to-end
   Scenario: Pending feature — surfaced in Skipped report
     Given the backend is reachable
     Then the health endpoint returns ok
+
+  # Migration-diff scenarios — fail conditionally on CTRF_SUITE so the
+  # tests-changed-report / summary-delta-report have something meaningful
+  # to surface when comparing post-upgrade against pre-upgrade.
+
+  @migration @regression
+  Scenario: Schema column type — passes pre, fails post
+    When a migration-sensitive operation runs
+
+  @migration @recovery
+  Scenario: Known issue — fails pre, fixed post
+    When a previously-broken operation runs

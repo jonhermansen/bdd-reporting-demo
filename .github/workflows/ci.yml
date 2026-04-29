@@ -64,16 +64,25 @@ jobs:
         if: always()
         run: find reports -type f | tee "$GITHUB_STEP_SUMMARY"
 
-      - name: Publish merged CTRF report
+      # Migration diff: post-upgrade is the "current run", pre-upgrade is
+      # the baseline. tests-changed-report and summary-delta-report compute
+      # regressions/recoveries between the two. Aggregate metrics
+      # (insights/slowest/fail-rate/flaky-rate/previous-results) come from
+      # the action's own history fetch via GITHUB_TOKEN — the artifact it
+      # uploads (ctrf-report) tracks post-upgrade across runs.
+      - name: Publish migration report
         if: always()
         uses: ctrf-io/github-test-reporter@0f299074936c32ccaab5be5230511f6b2b9080aa # v1.0.28
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          report-path: reports/integration/ctrf*.json
+          report-path: reports/integration/ctrf.post.json
+          baseline-report-path: reports/integration/ctrf.pre.json
 
           # Dense on green, rich on red
           summary-report: true
+          summary-delta-report: true
+          tests-changed-report: true
           failed-folded-report: true
           flaky-report: true
           flaky-rate-report: true
@@ -81,7 +90,6 @@ jobs:
           previous-results-report: true
           insights-report: true
           slowest-report: true
-          tests-changed-report: true
           skipped-report: true
           suite-folded-report: true
           file-report: true
@@ -104,56 +112,4 @@ jobs:
           upload-artifact: true
           previous-results-max: 20
           group-by: suite
-          exit-on-fail: false
-
-      # ─────────────────────────────────────────────────────────────────
-      # Per-phase history streams: identical action, distinct artifact-name
-      # so each phase accumulates its own multi-run trend (Insights p95,
-      # flaky rate, fail rate). Lets us spot regressions that only appear
-      # post-upgrade.
-      # ─────────────────────────────────────────────────────────────────
-      - name: Pre-upgrade history stream
-        if: always()
-        uses: ctrf-io/github-test-reporter@0f299074936c32ccaab5be5230511f6b2b9080aa # v1.0.28
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          report-path: reports/integration/ctrf.pre.json
-          artifact-name: ctrf-report-pre
-          summary-report: true
-          insights-report: true
-          previous-results-report: true
-          slowest-report: true
-          flaky-rate-report: true
-          fail-rate-report: true
-          ai-report: false
-          ai-summary-report: false
-          summary: true
-          pull-request: false
-          annotate: false
-          upload-artifact: true
-          previous-results-max: 20
-          exit-on-fail: false
-
-      - name: Post-upgrade history stream
-        if: always()
-        uses: ctrf-io/github-test-reporter@0f299074936c32ccaab5be5230511f6b2b9080aa # v1.0.28
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          report-path: reports/integration/ctrf.post.json
-          artifact-name: ctrf-report-post
-          summary-report: true
-          insights-report: true
-          previous-results-report: true
-          slowest-report: true
-          flaky-rate-report: true
-          fail-rate-report: true
-          ai-report: false
-          ai-summary-report: false
-          summary: true
-          pull-request: false
-          annotate: false
-          upload-artifact: true
-          previous-results-max: 20
           exit-on-fail: false

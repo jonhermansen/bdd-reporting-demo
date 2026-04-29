@@ -87,3 +87,19 @@ When("a request is sent with intermittent network jitter", async function () {
 Then("the response is eventually successful", function () {
   assert.ok(true);
 });
+
+// ── Migration-diff steps — phase-conditional outcomes ─────────────────────
+
+When("a migration-sensitive operation runs", async function () {
+  await sleep(jitter(50, 200));
+  if (process.env.CTRF_SUITE === "post-upgrade") {
+    assert.fail("post-upgrade regression: schema column type changed unexpectedly");
+  }
+});
+
+When("a previously-broken operation runs", async function () {
+  await sleep(jitter(50, 200));
+  if (process.env.CTRF_SUITE !== "post-upgrade") {
+    assert.fail("known pre-upgrade issue: index missing on legacy schema");
+  }
+});
