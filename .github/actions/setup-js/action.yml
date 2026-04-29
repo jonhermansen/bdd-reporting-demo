@@ -1,9 +1,0 @@
-name: Setup JS
-description: Install the npm workspace tree. Assumes setup-nix ran earlier.
-
-runs:
-  using: composite
-  steps:
-    - name: Install workspace
-      shell: bash
-      run: nix develop --command bash -c "npm ci || npm install"
