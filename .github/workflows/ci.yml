@@ -63,12 +63,24 @@ jobs:
         if: always()
         run: mv reports/integration/ctrf.json reports/integration/ctrf.post.json
 
-      # Three lenses on the same data. Each invocation has a distinct
-      # artifact-name so its history-fetch sees only its own phase's prior
-      # runs. We disable each one's auto-write to GITHUB_STEP_SUMMARY
-      # (summary: false) and compose them ourselves below into one pane
-      # with collapsible <details> sections — Migration diff open by
-      # default, the two trend lenses collapsed.
+      # ── Migration diff: custom action with explicit Pre/Post/Δ table
+      # plus regressed/recovered detail. Replaces the ctrf-io plugin's
+      # summary-delta-report (which has the wrong rendering shape and
+      # bugs around baseline-report-path). Writes directly to
+      # GITHUB_STEP_SUMMARY at the top.
+      - name: Migration diff
+        if: always()
+        uses: ./.github/actions/migration-report
+        with:
+          pre-report: reports/integration/ctrf.pre.json
+          post-report: reports/integration/ctrf.post.json
+
+      # The two ctrf-io invocations below cover what the plugin is good
+      # at: per-phase trend reports across that phase's history. Each
+      # uses a distinct artifact-name so its history fetch walks only
+      # its own phase's prior artifacts. Their summaries are captured
+      # via outputs.summary and wrapped in collapsed <details> blocks
+      # below.
 
       # ── Lens 1: pre-upgrade trends across pre runs ─────────────────────
       - id: pre-trend
@@ -120,56 +132,14 @@ jobs:
           group-by: suite
           exit-on-fail: false
 
-      # ── Lens 3: migration diff (post vs pre, this run) ─────────────────
-      # baseline: '' explicitly disables the action's default
-      # baseline=1 numeric mode, which would otherwise silently overwrite
-      # baseline-report-path with the most recent prior post artifact and
-      # produce wrong diffs. Fix worth upstreaming — the file path should
-      # win when both inputs are set.
-      - id: migration-diff
-        name: Migration diff
-        if: always()
-        uses: ctrf-io/github-test-reporter@0f299074936c32ccaab5be5230511f6b2b9080aa # v1.0.28
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          report-path: reports/integration/ctrf.post.json
-          baseline-report-path: reports/integration/ctrf.pre.json
-          baseline: ''                     # see comment above
-          artifact-name: ctrf-report-post  # share post history so the
-                                           # summary-delta gate passes
-          summary-delta-report: true
-          tests-changed-report: true
-          failed-folded-report: true
-          flaky-report: true
-          skipped-report: true
-          ai-report: false
-          ai-summary-report: false
-          summary: false
-          pull-request: true
-          update-comment: true
-          collapse-large-reports: true
-          annotate: true
-          use-suite-name: true
-          upload-artifact: false           # already uploaded by Lens 2
-          group-by: suite
-          exit-on-fail: false
-
-      # ── Compose: migration diff up top (open), trends collapsed ────────
-      - name: Compose step summary
+      # ── Compose: migration diff already written; append trends below ───
+      - name: Append trend sections
         if: always()
         env:
-          DIFF_SUMMARY: ${{ steps.migration-diff.outputs.summary }}
           PRE_SUMMARY: ${{ steps.pre-trend.outputs.summary }}
           POST_SUMMARY: ${{ steps.post-trend.outputs.summary }}
         run: |
           {
-            echo '<details open><summary>🔄 <b>Migration diff</b> — post-upgrade vs pre-upgrade (this run)</summary>'
-            echo
-            printf '%s\n' "$DIFF_SUMMARY"
-            echo
-            echo '</details>'
-            echo
             echo '<details><summary>📈 <b>Pre-upgrade trend</b> — across past pre runs</summary>'
             echo
             printf '%s\n' "$PRE_SUMMARY"

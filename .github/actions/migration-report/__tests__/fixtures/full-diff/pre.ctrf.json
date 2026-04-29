@@ -1,0 +1,16 @@
+{
+  "reportFormat": "CTRF",
+  "specVersion": "0.0.0",
+  "results": {
+    "tool": { "name": "test" },
+    "summary": { "tests": 6, "passed": 4, "failed": 1, "skipped": 1, "pending": 0, "other": 0, "start": 1000, "stop": 6000, "duration": 5000 },
+    "tests": [
+      { "name": "stable_pass",        "status": "passed",  "duration": 50,  "flaky": false },
+      { "name": "stable_fail",        "status": "failed",  "duration": 25,  "flaky": false, "message": "still broken: same error as last time" },
+      { "name": "becomes_regressed",  "status": "passed",  "duration": 100, "flaky": false },
+      { "name": "becomes_recovered",  "status": "failed",  "duration": 30,  "flaky": false, "message": "old issue: index missing" },
+      { "name": "stable_pass_2",      "status": "passed",  "duration": 40,  "flaky": false },
+      { "name": "stable_skip",        "status": "skipped", "duration": 0,   "flaky": false }
+    ]
+  }
+}

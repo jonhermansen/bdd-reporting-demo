@@ -1,0 +1,71 @@
+name: 'Migration test report'
+description: |
+  Compare two CTRF reports (pre/post upgrade) and render a focused
+  migration-test summary to GITHUB_STEP_SUMMARY.
+
+  Surfaces what the generic CTRF reporters don't: per-test status
+  transitions (regressed / recovered) and an explicit Pre / Post / Δ
+  summary table.
+
+inputs:
+  pre-report:
+    description: 'Path to the pre-upgrade CTRF JSON file'
+    required: true
+  post-report:
+    description: 'Path to the post-upgrade CTRF JSON file'
+    required: true
+
+outputs:
+  regressed:
+    description: 'Number of tests that regressed (passed → failed)'
+    value: ${{ steps.compute.outputs.regressed }}
+  recovered:
+    description: 'Number of tests that recovered (failed → passed)'
+    value: ${{ steps.compute.outputs.recovered }}
+
+runs:
+  using: composite
+  steps:
+    - id: compute
+      shell: bash
+      env:
+        PRE_REPORT: ${{ inputs.pre-report }}
+        POST_REPORT: ${{ inputs.post-report }}
+      run: |
+        set -euo pipefail
+        if [ ! -f "$PRE_REPORT" ]; then
+          echo "::error::pre-report not found: $PRE_REPORT"
+          exit 1
+        fi
+        if [ ! -f "$POST_REPORT" ]; then
+          echo "::error::post-report not found: $POST_REPORT"
+          exit 1
+        fi
+
+        # Render markdown
+        jq -nr \
+          --slurpfile pre "$PRE_REPORT" \
+          --slurpfile post "$POST_REPORT" \
+          -f "$GITHUB_ACTION_PATH/migration.jq" \
+          >> "$GITHUB_STEP_SUMMARY"
+
+        # Counts as outputs (callers can branch on them, e.g. fail the
+        # job if regressed > 0)
+        regressed=$(jq -nr \
+          --slurpfile pre "$PRE_REPORT" \
+          --slurpfile post "$POST_REPORT" '
+            ($pre[0].results.tests | INDEX(.name)) as $by_name
+            | $post[0].results.tests
+            | map(select(.status == "failed" and ($by_name[.name].status == "passed")))
+            | length
+          ')
+        recovered=$(jq -nr \
+          --slurpfile pre "$PRE_REPORT" \
+          --slurpfile post "$POST_REPORT" '
+            ($pre[0].results.tests | INDEX(.name)) as $by_name
+            | $post[0].results.tests
+            | map(select(.status == "passed" and ($by_name[.name].status == "failed")))
+            | length
+          ')
+        echo "regressed=$regressed" >> "$GITHUB_OUTPUT"
+        echo "recovered=$recovered" >> "$GITHUB_OUTPUT"

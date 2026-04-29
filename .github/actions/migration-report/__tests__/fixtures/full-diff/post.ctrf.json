@@ -1,0 +1,16 @@
+{
+  "reportFormat": "CTRF",
+  "specVersion": "0.0.0",
+  "results": {
+    "tool": { "name": "test" },
+    "summary": { "tests": 6, "passed": 4, "failed": 1, "skipped": 1, "pending": 0, "other": 0, "start": 7000, "stop": 11500, "duration": 4500 },
+    "tests": [
+      { "name": "stable_pass",        "status": "passed",  "duration": 55,  "flaky": false },
+      { "name": "stable_fail",        "status": "failed",  "duration": 28,  "flaky": false, "message": "still broken: same error as last time" },
+      { "name": "becomes_regressed",  "status": "failed",  "duration": 110, "flaky": false, "message": "AssertionError: schema column type changed unexpectedly" },
+      { "name": "becomes_recovered",  "status": "passed",  "duration": 35,  "flaky": false },
+      { "name": "stable_pass_2",      "status": "passed",  "duration": 42,  "flaky": false },
+      { "name": "stable_skip",        "status": "skipped", "duration": 0,   "flaky": false }
+    ]
+  }
+}

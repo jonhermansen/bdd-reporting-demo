@@ -1,0 +1,11 @@
+{
+  "reportFormat": "CTRF",
+  "specVersion": "0.0.0",
+  "results": {
+    "tool": { "name": "test" },
+    "summary": { "tests": 1, "passed": 1, "failed": 0, "skipped": 0, "pending": 0, "other": 0, "start": 0, "stop": 0, "duration": 0 },
+    "tests": [
+      { "name": "only_in_post", "status": "passed", "duration": 42 }
+    ]
+  }
+}
