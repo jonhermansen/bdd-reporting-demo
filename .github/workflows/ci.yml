@@ -152,7 +152,7 @@ jobs:
         if: always()
         run: mv reports/integration/ctrf.json reports/integration/ctrf.pre.json
       - name: Simulated upgrade
-        run: echo "pretend-upgrade: would migrate schema / swap binaries here"
+        run: 'echo "pretend-upgrade — would migrate schema / swap binaries here"'
       - name: Run integration tests (post-upgrade)
         continue-on-error: true
         env:
