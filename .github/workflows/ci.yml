@@ -103,7 +103,6 @@ jobs:
 
           summary: true
           pull-request: true
-          on-fail-only: true          # PR comment only when something's red
           update-comment: true
           collapse-large-reports: true
           annotate: true
