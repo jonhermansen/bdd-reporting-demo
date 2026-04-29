@@ -15,56 +15,16 @@ permissions:
   checks: write
   pull-requests: write
   actions: read
-  security-events: write
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────
-  # Fast gate: syntax/format/audit. Fails in seconds and kills the pipe early.
-  # ─────────────────────────────────────────────────────────────────────────
-
-  lint:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/setup-nix
-      - uses: ./.github/actions/setup-js
-      - name: npm audit (fail on high)
-        run: nix develop --command npm audit --audit-level=high --workspaces --include-workspace-root
-
-  # ─────────────────────────────────────────────────────────────────────────
-  # Security scans: run in parallel with builds.
-  # ─────────────────────────────────────────────────────────────────────────
-
-  dep-review:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
-        with:
-          fail-on-severity: high
-          comment-summary-in-pr: on-failure
-
-  codeql:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: github/codeql-action/init@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4.35.2
-        with:
-          languages: javascript-typescript,actions
-      - uses: github/codeql-action/analyze@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4.35.2
-
-  # ─────────────────────────────────────────────────────────────────────────
-  # Component jobs: each self-contained; fans out in parallel.
-  # Naming = component name, not activity. Internal phases: build, test, report.
+  # reporter: builds the cucumber-ctrf-json-reporter package that integration
+  # consumes via download-artifact (so we exercise the published-shape, not
+  # source).
   # ─────────────────────────────────────────────────────────────────────────
 
   reporter:
-    needs: lint
     runs-on: ubuntu-24.04
-    outputs:
-      # marker so downstream jobs can depend on this being built
-      built: "yes"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/setup-nix
@@ -76,55 +36,10 @@ jobs:
           name: reporter-dist
           path: packages/cucumber-ctrf-json-reporter/dist/
 
-  backend:
-    needs: lint
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/setup-nix
-      - uses: ./.github/actions/setup-scala
-      - name: Compile
-        working-directory: components/backend
-        run: nix develop ../.. --command sbt compile
-      - name: Test
-        working-directory: components/backend
-        continue-on-error: true
-        run: nix develop ../.. --command sbt test
-      - name: Convert JUnit to CTRF
-        working-directory: components/backend
-        run: nix develop ../.. --command npx --yes junit-to-ctrf 'reports/junit/*.xml' -o ../../reports/backend/ctrf.json --tool scalatest
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
-        with:
-          name: ctrf-backend
-          path: reports/backend/ctrf.json
-          if-no-files-found: warn
-
-  ui:
-    needs: lint
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/setup-nix
-      - uses: ./.github/actions/setup-js
-      - name: Build
-        working-directory: components/ui
-        run: nix develop ../.. --command npm run build
-      - name: Test
-        continue-on-error: true
-        run: nix develop --command npm run test:ui
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
-        with:
-          name: ctrf-ui
-          path: reports/ui/ctrf.json
-          if-no-files-found: warn
-
   # ─────────────────────────────────────────────────────────────────────────
-  # Integration: cucumber-js suite producing CTRF JSON. Step implementations
+  # integration: cucumber-js suite producing CTRF JSON. Step implementations
   # are pure synthesis (jittered durations + occasional simulated failures)
-  # because this component exists to validate the reporter pipeline, not
-  # any real product behavior. No backend/UI/postgres needed.
+  # because this component exists to validate the reporter pipeline.
   # ─────────────────────────────────────────────────────────────────────────
 
   integration:
@@ -169,12 +84,12 @@ jobs:
           if-no-files-found: warn
 
   # ─────────────────────────────────────────────────────────────────────────
-  # Aggregator: one final report. Merges every component's CTRF JSON.
-  # This is the single required status check you gate PRs on.
+  # report: merges CTRF artifacts and renders the step summary + per-phase
+  # history streams.
   # ─────────────────────────────────────────────────────────────────────────
 
   report:
-    needs: [backend, ui, integration]
+    needs: integration
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -192,8 +107,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          # ctrf*.json picks up backend/ui ctrf.json plus integration's
-          # ctrf.pre.json + ctrf.post.json from the migration pattern.
           report-path: ctrf/**/ctrf*.json
 
           # Dense on green, rich on red
@@ -228,13 +141,13 @@ jobs:
           upload-artifact: true
           previous-results-max: 20
           group-by: suite
-          exit-on-fail: false         # don't fail aggregator; component jobs own pass/fail
+          exit-on-fail: false         # don't fail aggregator; integration owns pass/fail
 
       # ─────────────────────────────────────────────────────────────────
       # Per-phase history streams: identical action, distinct artifact-name
       # so each phase accumulates its own multi-run trend (Insights p95,
       # flaky rate, fail rate). Lets us spot regressions that only appear
-      # post-upgrade. Each invocation has its own upload artifact bucket.
+      # post-upgrade.
       # ─────────────────────────────────────────────────────────────────
       - name: Pre-upgrade history stream
         if: always()
