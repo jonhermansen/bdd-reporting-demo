@@ -92,7 +92,6 @@ jobs:
           skipped-report: true
           suite-folded-report: true
           file-report: true
-          pull-request-report: true
           commit-report: true
 
           # Explicitly disabled — the action bundles AI provider clients
