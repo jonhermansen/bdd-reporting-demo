@@ -65,12 +65,14 @@ jobs:
 
       # Three lenses on the same data. Each invocation has a distinct
       # artifact-name so its history-fetch sees only its own phase's prior
-      # runs. Lens 3 borrows post-history (artifact-name) so summary-delta's
-      # 'previousReports.length > 0' gate passes; baseline-report-path then
-      # overrides what the deltas compare against.
+      # runs. We disable each one's auto-write to GITHUB_STEP_SUMMARY
+      # (summary: false) and compose them ourselves below into one pane
+      # with collapsible <details> sections — Migration diff open by
+      # default, the two trend lenses collapsed.
 
       # ── Lens 1: pre-upgrade trends across pre runs ─────────────────────
-      - name: Pre-upgrade trend
+      - id: pre-trend
+        name: Pre-upgrade trend
         if: always()
         uses: ctrf-io/github-test-reporter@0f299074936c32ccaab5be5230511f6b2b9080aa # v1.0.28
         env:
@@ -78,26 +80,24 @@ jobs:
         with:
           report-path: reports/integration/ctrf.pre.json
           artifact-name: ctrf-report-pre
-          title: "Pre-upgrade — trends across pre runs"
           summary-report: true
           insights-report: true
           slowest-report: true
           fail-rate-report: true
           flaky-rate-report: true
-          previous-results-report: true
           ai-report: false
           ai-summary-report: false
-          summary: true
+          summary: false                   # capture via outputs.summary
           pull-request: false
           annotate: false
           use-suite-name: true
           upload-artifact: true
-          previous-results-max: 10
           group-by: suite
           exit-on-fail: false
 
       # ── Lens 2: post-upgrade trends across post runs ───────────────────
-      - name: Post-upgrade trend
+      - id: post-trend
+        name: Post-upgrade trend
         if: always()
         uses: ctrf-io/github-test-reporter@0f299074936c32ccaab5be5230511f6b2b9080aa # v1.0.28
         env:
@@ -105,26 +105,29 @@ jobs:
         with:
           report-path: reports/integration/ctrf.post.json
           artifact-name: ctrf-report-post
-          title: "Post-upgrade — trends across post runs"
           summary-report: true
           insights-report: true
           slowest-report: true
           fail-rate-report: true
           flaky-rate-report: true
-          previous-results-report: true
           ai-report: false
           ai-summary-report: false
-          summary: true
+          summary: false
           pull-request: false
           annotate: false
           use-suite-name: true
           upload-artifact: true
-          previous-results-max: 10
           group-by: suite
           exit-on-fail: false
 
       # ── Lens 3: migration diff (post vs pre, this run) ─────────────────
-      - name: Migration diff
+      # baseline: '' explicitly disables the action's default
+      # baseline=1 numeric mode, which would otherwise silently overwrite
+      # baseline-report-path with the most recent prior post artifact and
+      # produce wrong diffs. Fix worth upstreaming — the file path should
+      # win when both inputs are set.
+      - id: migration-diff
+        name: Migration diff
         if: always()
         uses: ctrf-io/github-test-reporter@0f299074936c32ccaab5be5230511f6b2b9080aa # v1.0.28
         env:
@@ -132,9 +135,9 @@ jobs:
         with:
           report-path: reports/integration/ctrf.post.json
           baseline-report-path: reports/integration/ctrf.pre.json
+          baseline: ''                     # see comment above
           artifact-name: ctrf-report-post  # share post history so the
                                            # summary-delta gate passes
-          title: "Migration diff — post-upgrade vs pre-upgrade (this run)"
           summary-delta-report: true
           tests-changed-report: true
           failed-folded-report: true
@@ -142,7 +145,7 @@ jobs:
           skipped-report: true
           ai-report: false
           ai-summary-report: false
-          summary: true
+          summary: false
           pull-request: true
           update-comment: true
           collapse-large-reports: true
@@ -151,3 +154,31 @@ jobs:
           upload-artifact: false           # already uploaded by Lens 2
           group-by: suite
           exit-on-fail: false
+
+      # ── Compose: migration diff up top (open), trends collapsed ────────
+      - name: Compose step summary
+        if: always()
+        env:
+          DIFF_SUMMARY: ${{ steps.migration-diff.outputs.summary }}
+          PRE_SUMMARY: ${{ steps.pre-trend.outputs.summary }}
+          POST_SUMMARY: ${{ steps.post-trend.outputs.summary }}
+        run: |
+          {
+            echo '<details open><summary>🔄 <b>Migration diff</b> — post-upgrade vs pre-upgrade (this run)</summary>'
+            echo
+            printf '%s\n' "$DIFF_SUMMARY"
+            echo
+            echo '</details>'
+            echo
+            echo '<details><summary>📈 <b>Pre-upgrade trend</b> — across past pre runs</summary>'
+            echo
+            printf '%s\n' "$PRE_SUMMARY"
+            echo
+            echo '</details>'
+            echo
+            echo '<details><summary>📈 <b>Post-upgrade trend</b> — across past post runs</summary>'
+            echo
+            printf '%s\n' "$POST_SUMMARY"
+            echo
+            echo '</details>'
+          } >> "$GITHUB_STEP_SUMMARY"
