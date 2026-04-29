@@ -63,13 +63,68 @@ jobs:
         if: always()
         run: mv reports/integration/ctrf.json reports/integration/ctrf.post.json
 
-      # Migration diff: post-upgrade is the "current run", pre-upgrade is
-      # the baseline. tests-changed-report and summary-delta-report compute
-      # regressions/recoveries between the two. Aggregate metrics
-      # (insights/slowest/fail-rate/flaky-rate/previous-results) come from
-      # the action's own history fetch via GITHUB_TOKEN — the artifact it
-      # uploads (ctrf-report) tracks post-upgrade across runs.
-      - name: Publish migration report
+      # Three lenses on the same data. Each invocation has a distinct
+      # artifact-name so its history-fetch sees only its own phase's prior
+      # runs. Lens 3 borrows post-history (artifact-name) so summary-delta's
+      # 'previousReports.length > 0' gate passes; baseline-report-path then
+      # overrides what the deltas compare against.
+
+      # ── Lens 1: pre-upgrade trends across pre runs ─────────────────────
+      - name: Pre-upgrade trend
+        if: always()
+        uses: ctrf-io/github-test-reporter@0f299074936c32ccaab5be5230511f6b2b9080aa # v1.0.28
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          report-path: reports/integration/ctrf.pre.json
+          artifact-name: ctrf-report-pre
+          title: "Pre-upgrade — trends across pre runs"
+          summary-report: true
+          insights-report: true
+          slowest-report: true
+          fail-rate-report: true
+          flaky-rate-report: true
+          previous-results-report: true
+          ai-report: false
+          ai-summary-report: false
+          summary: true
+          pull-request: false
+          annotate: false
+          use-suite-name: true
+          upload-artifact: true
+          previous-results-max: 10
+          group-by: suite
+          exit-on-fail: false
+
+      # ── Lens 2: post-upgrade trends across post runs ───────────────────
+      - name: Post-upgrade trend
+        if: always()
+        uses: ctrf-io/github-test-reporter@0f299074936c32ccaab5be5230511f6b2b9080aa # v1.0.28
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          report-path: reports/integration/ctrf.post.json
+          artifact-name: ctrf-report-post
+          title: "Post-upgrade — trends across post runs"
+          summary-report: true
+          insights-report: true
+          slowest-report: true
+          fail-rate-report: true
+          flaky-rate-report: true
+          previous-results-report: true
+          ai-report: false
+          ai-summary-report: false
+          summary: true
+          pull-request: false
+          annotate: false
+          use-suite-name: true
+          upload-artifact: true
+          previous-results-max: 10
+          group-by: suite
+          exit-on-fail: false
+
+      # ── Lens 3: migration diff (post vs pre, this run) ─────────────────
+      - name: Migration diff
         if: always()
         uses: ctrf-io/github-test-reporter@0f299074936c32ccaab5be5230511f6b2b9080aa # v1.0.28
         env:
@@ -77,36 +132,22 @@ jobs:
         with:
           report-path: reports/integration/ctrf.post.json
           baseline-report-path: reports/integration/ctrf.pre.json
-
-          # Dense on green, rich on red
-          summary-report: true
+          artifact-name: ctrf-report-post  # share post history so the
+                                           # summary-delta gate passes
+          title: "Migration diff — post-upgrade vs pre-upgrade (this run)"
           summary-delta-report: true
           tests-changed-report: true
           failed-folded-report: true
           flaky-report: true
-          flaky-rate-report: true
-          fail-rate-report: true
-          previous-results-report: true
-          insights-report: true
-          slowest-report: true
           skipped-report: true
-          suite-folded-report: true
-          file-report: true
-          commit-report: true
-
-          # Explicitly disabled — the action bundles AI provider clients
-          # (OpenAI/Anthropic/Gemini/Bedrock/etc.) gated behind these flags.
-          # We never want test data POSTed to a third party.
           ai-report: false
           ai-summary-report: false
-
           summary: true
           pull-request: true
           update-comment: true
           collapse-large-reports: true
           annotate: true
           use-suite-name: true
-          upload-artifact: true
-          previous-results-max: 20
+          upload-artifact: false           # already uploaded by Lens 2
           group-by: suite
           exit-on-fail: false
