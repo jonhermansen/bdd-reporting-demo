@@ -121,34 +121,23 @@ jobs:
           if-no-files-found: warn
 
   # ─────────────────────────────────────────────────────────────────────────
-  # Integration: spins up stack via docker-compose + runs the backend directly.
-  # Drives the UI (built earlier) via playwright through cucumber-js.
+  # Integration: cucumber-js suite producing CTRF JSON. Step implementations
+  # are pure synthesis (jittered durations + occasional simulated failures)
+  # because this component exists to validate the reporter pipeline, not
+  # any real product behavior. No backend/UI/postgres needed.
   # ─────────────────────────────────────────────────────────────────────────
 
   integration:
-    needs: [backend, ui, reporter]
+    needs: reporter
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/setup-nix
       - uses: ./.github/actions/setup-js
-      - uses: ./.github/actions/setup-scala
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: reporter-dist
           path: packages/cucumber-ctrf-json-reporter/dist/
-      - name: Start postgres
-        run: docker compose up -d postgres --wait
-      - name: Start backend
-        working-directory: components/backend
-        run: |
-          nix develop ../.. --command sbt "runMain demo.Server" &
-          nix develop ../.. --command npx --yes wait-on http://localhost:8080/health --timeout 60000
-      - name: Start UI
-        working-directory: components/ui
-        run: |
-          nix develop ../.. --command npm run preview &
-          nix develop ../.. --command npx --yes wait-on http://localhost:5173 --timeout 30000
       # Migration-pattern reporting: run the same suite twice, once before
       # and once after a (placeholder) upgrade, so the merged report can show
       # pre/post side-by-side AND each phase gets its own history stream.

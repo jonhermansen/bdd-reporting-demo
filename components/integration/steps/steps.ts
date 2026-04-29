@@ -1,6 +1,12 @@
+// All step implementations are synthesized — no real services involved.
+// This component exists to validate the CTRF reporter pipeline, so the
+// "test results" are deliberately fabricated to give the reporter a
+// rich, varied dataset (durations, retries, skips, failures).
 import { Before, Given, When, Then } from "@cucumber/cucumber";
 import assert from "node:assert/strict";
-import type { StackWorld } from "./world.js";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const jitter = (lo: number, hi: number) => lo + Math.floor(Math.random() * (hi - lo));
 
 // Mark @wip scenarios as skipped so they surface in the reporter's Skipped
 // section rather than being filtered out entirely.
@@ -8,57 +14,54 @@ Before({ tags: "@wip" }, function () {
   return "skipped";
 });
 
-const BACKEND = process.env.BACKEND_URL ?? "http://localhost:8080";
-const UI = process.env.UI_URL ?? "http://localhost:5173";
+// ── "Backend" mocks — fast, always-passing ────────────────────────────────
 
 Given("the backend is reachable", async function () {
-  const r = await fetch(`${BACKEND}/health`);
-  assert.ok(r.ok);
+  await sleep(jitter(5, 30));
 });
 
 Then("the health endpoint returns ok", async function () {
-  const r = await fetch(`${BACKEND}/health`);
-  assert.equal(await r.text(), "ok");
+  await sleep(jitter(5, 30));
 });
 
-When("I POST an item named {string}", async function (name: string) {
-  const r = await fetch(`${BACKEND}/api/items`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name }),
-  });
-  assert.equal(r.status, 201);
+When("I POST an item named {string}", async function (_name: string) {
+  await sleep(jitter(20, 80));
 });
 
-Then("GET \\/api\\/items includes {string}", async function (name: string) {
-  const r = await fetch(`${BACKEND}/api/items`);
-  const items = (await r.json()) as { name: string }[];
-  assert.ok(items.some((i) => i.name === name));
+Then("GET \\/api\\/items includes {string}", async function (_name: string) {
+  await sleep(jitter(15, 60));
 });
 
-When("I open the UI", async function (this: StackWorld) {
-  await this.page!.goto(UI);
+// ── "UI" mocks — slightly slower; one occasional failure for Failed-Tests ─
+
+When("I open the UI", async function () {
+  await sleep(jitter(80, 250));
 });
 
-When("I add an item named {string} via the UI", async function (this: StackWorld, name: string) {
-  await this.page!.getByTestId("new-item").fill(name);
-  await this.page!.getByTestId("add").click();
+When("I add an item named {string} via the UI", async function (_name: string) {
+  await sleep(jitter(60, 200));
+  // ~5% deterministic-looking failure so the reporter has a Failed Test row
+  // to render on most runs (still varies enough to exercise fail-rate trend).
+  if (Math.random() < 0.05) {
+    assert.fail("simulated UI flake: add button did not register click");
+  }
 });
 
-Then("the item {string} appears in the list", async function (this: StackWorld, name: string) {
-  await this.page!.getByText(name).waitFor();
+Then("the item {string} appears in the list", async function (_name: string) {
+  await sleep(jitter(40, 150));
 });
 
-Then("the heading {string} eventually appears", async function (this: StackWorld, text: string) {
-  // Slight flake: UI is usually up but occasionally not ready
-  if (Math.random() < 0.3) await new Promise((r) => setTimeout(r, 3500));
-  await this.page!.getByRole("heading", { name: text }).waitFor({ timeout: 3000 });
+Then("the heading {string} eventually appears", async function (_text: string) {
+  // Flaky timing: occasionally takes long enough to "fail" — paired with
+  // @flaky tag this becomes a passes-on-retry row in the Flaky section.
+  if (Math.random() < 0.3) {
+    await sleep(jitter(800, 1400));
+    throw new Error("simulated render timeout");
+  }
+  await sleep(jitter(80, 250));
 });
 
-// ── Showcase steps: drive the reporter's Slowest / Flaky / Skipped sections ──
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const jitter = (lo: number, hi: number) => lo + Math.floor(Math.random() * (hi - lo));
+// ── Showcase steps — drive Slowest / Flaky-rate / Skipped sections ────────
 
 When("a {word} workload runs", async function (size: string) {
   // Bucketed durations so Slowest p95 has a visible spread across runs.
@@ -72,14 +75,11 @@ When("a {word} workload runs", async function (size: string) {
   await sleep(jitter(lo, hi));
 });
 
-Then("it returns within budget", async function () {
-  // Always passes — the value is in the durations, not the assertions.
+Then("it returns within budget", function () {
   assert.ok(true);
 });
 
 When("a request is sent with intermittent network jitter", async function () {
-  // Variable duration + ~20% failure rate. With cucumber's @flaky retry tag
-  // this surfaces as flaky (passed-after-retry) most runs.
   await sleep(jitter(40, 220));
   if (Math.random() < 0.2) throw new Error("simulated transient network blip");
 });
