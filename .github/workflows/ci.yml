@@ -18,41 +18,22 @@ permissions:
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────
-  # reporter: builds the cucumber-ctrf-json-reporter package that integration
-  # consumes via download-artifact (so we exercise the published-shape, not
-  # source).
+  # Single-runner pipeline: build reporter → run cucumber twice (pre/post
+  # migration) → render reports. Step implementations are pure synthesis
+  # (jittered durations + occasional simulated failures) so this validates
+  # the reporter pipeline without any real services.
   # ─────────────────────────────────────────────────────────────────────────
 
-  reporter:
+  pipeline:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/setup-nix
       - uses: ./.github/actions/setup-js
+
       - name: Build cucumber-ctrf-json-reporter
         run: nix develop --command npm --workspace cucumber-ctrf-json-reporter run build
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: reporter-dist
-          path: packages/cucumber-ctrf-json-reporter/dist/
 
-  # ─────────────────────────────────────────────────────────────────────────
-  # integration: cucumber-js suite producing CTRF JSON. Step implementations
-  # are pure synthesis (jittered durations + occasional simulated failures)
-  # because this component exists to validate the reporter pipeline.
-  # ─────────────────────────────────────────────────────────────────────────
-
-  integration:
-    needs: reporter
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/setup-nix
-      - uses: ./.github/actions/setup-js
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: reporter-dist
-          path: packages/cucumber-ctrf-json-reporter/dist/
       # Migration-pattern reporting: run the same suite twice, once before
       # and once after a (placeholder) upgrade, so the merged report can show
       # pre/post side-by-side AND each phase gets its own history stream.
@@ -66,8 +47,10 @@ jobs:
       - name: Stash pre-upgrade CTRF
         if: always()
         run: mv reports/integration/ctrf.json reports/integration/ctrf.pre.json
+
       - name: Simulated upgrade
         run: 'echo "pretend-upgrade — would migrate schema / swap binaries here"'
+
       - name: Run integration tests (post-upgrade)
         continue-on-error: true
         env:
@@ -76,38 +59,18 @@ jobs:
       - name: Stash post-upgrade CTRF
         if: always()
         run: mv reports/integration/ctrf.json reports/integration/ctrf.post.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
-        with:
-          name: ctrf-integration
-          path: reports/integration/ctrf.*.json
-          if-no-files-found: warn
 
-  # ─────────────────────────────────────────────────────────────────────────
-  # report: merges CTRF artifacts and renders the step summary + per-phase
-  # history streams.
-  # ─────────────────────────────────────────────────────────────────────────
-
-  report:
-    needs: integration
-    if: always()
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: ctrf-*
-          path: ctrf
       - name: List collected CTRF files
-        run: |
-          mkdir -p ctrf
-          find ctrf -type f | tee "$GITHUB_STEP_SUMMARY"
+        if: always()
+        run: find reports -type f | tee "$GITHUB_STEP_SUMMARY"
+
       - name: Publish merged CTRF report
+        if: always()
         uses: ctrf-io/github-test-reporter@0f299074936c32ccaab5be5230511f6b2b9080aa # v1.0.28
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          report-path: ctrf/**/ctrf*.json
+          report-path: reports/integration/ctrf*.json
 
           # Dense on green, rich on red
           summary-report: true
@@ -141,7 +104,7 @@ jobs:
           upload-artifact: true
           previous-results-max: 20
           group-by: suite
-          exit-on-fail: false         # don't fail aggregator; integration owns pass/fail
+          exit-on-fail: false
 
       # ─────────────────────────────────────────────────────────────────
       # Per-phase history streams: identical action, distinct artifact-name
@@ -155,7 +118,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          report-path: ctrf/**/ctrf.pre.json
+          report-path: reports/integration/ctrf.pre.json
           artifact-name: ctrf-report-pre
           summary-report: true
           insights-report: true
@@ -178,7 +141,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          report-path: ctrf/**/ctrf.post.json
+          report-path: reports/integration/ctrf.post.json
           artifact-name: ctrf-report-post
           summary-report: true
           insights-report: true
