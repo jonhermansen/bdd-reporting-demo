@@ -68,39 +68,62 @@ def rollup_status:
   else "other"
   end;
 
-# A leaf step row: 3 columns (Step | Status | Duration). The step name
-# is a link to the matching line in the .feature file.
+# Sum the durations on each step's extra.duration; consistent rollup so
+# the inner step durations always equal the scenario's reported duration.
+# (Cucumber's wall-clock test.duration includes hook + IPC overhead and
+# can differ slightly; we trade it for math consistency.)
+def sum_step_durations:
+  ((.steps // []) | map(.extra.duration // 0) | add) // 0;
+
+# A leaf step row: Status | Duration | Step. The step name is a link to
+# the matching line in the .feature file.
 def step_row:
   . as $s
   | $s.extra as $e
   | "<tr>"
-  + "<td>\(link_to($e.feature.uri // null; $e.feature.line // null; ($s.name | htmlesc)))</td>"
   + "<td>\($s.status | status_emoji)</td>"
   + "<td>\(($e.duration // 0) | ms_to_str)</td>"
+  + "<td>\(link_to($e.feature.uri // null; $e.feature.line // null; ($s.name | htmlesc)))</td>"
   + "</tr>";
 
-# Failure detail spans the full width with a <pre> message. Stack-trace
-# frames in the message become clickable github links.
+# Failure detail as a series of "extended" rows beneath the failed step:
+# one ⚠ row for the error type+message, then one row per stack frame
+# (each frame's file:line is a clickable link). Frames inherit indent
+# via leading "↳" so they read as belonging to the failed step.
 def failure_row($t):
   ($t.steps // [] | map(select(.status == "failed"))[0]) as $f
   | if $f then
       ($f.extra.message // $t.message // "no message") as $msg
-      | "<tr><td colspan=\"3\"><pre>\($msg | htmlesc | linkify_trace)</pre></td></tr>"
+      | ($f.extra.trace // "") as $trace
+      | ($msg | split("\n")[0]) as $first_line
+      | "<tr><td>⚠</td><td>—</td><td><i>\($first_line | htmlesc)</i></td></tr>"
+        + (
+            $trace
+            | split("\n")
+            | map(select(test("\\S")))
+            | map("<tr><td></td><td>—</td><td><sub>↳ \(. | htmlesc | linkify_trace)</sub></td></tr>")
+            | join("")
+          )
     else "" end;
 
-# A scenario row: name cell wraps a <details> whose body is the steps
-# table. The summary text is itself a link to the scenario's .feature
-# line.
+# A scenario row. Name cell wraps a <details> whose body is the steps
+# table; summary text links to the .feature scenario line. Optional
+# threadId tag and "(N retries)" annotation if applicable.
 def scenario_row:
   . as $t
   | ($t.name | htmlesc) as $name
-  | "<tr><td>"
+  | ($t | sum_step_durations) as $rolled
+  | "<tr>"
+    + "<td>\($t.status | status_emoji)</td>"
+    + "<td>\($rolled | ms_to_str)</td>"
+    + "<td>"
     + (if (($t.steps // []) | length) > 0 then
         "<details><summary>\(link_to($t.filePath; $t.line; $name))"
+        + (if ($t.threadId // "") != "" then " <sub><code>w\($t.threadId)</code></sub>" else "" end)
         + (if ($t.retries // 0) > 0 then " <sub>(\($t.retries) retries)</sub>" else "" end)
         + "</summary>"
         + "<table>"
-        + "<thead><tr><th>Step</th><th>Status</th><th>Duration</th></tr></thead>"
+        + "<thead><tr><th>Status</th><th>Duration</th><th>Step</th></tr></thead>"
         + "<tbody>"
         + ($t.steps | map(step_row) | join(""))
         + failure_row($t)
@@ -110,24 +133,23 @@ def scenario_row:
         link_to($t.filePath; $t.line; $name)
       end)
     + "</td>"
-    + "<td>\($t.status | status_emoji)</td>"
-    + "<td>\(($t.duration // 0) | ms_to_str)</td>"
     + "</tr>";
 
 # A file row: name cell wraps a <details> whose body is the scenarios
-# table. The summary text is itself a link to the .feature file.
+# table. Duration rolls up from scenarios' rolled-up step durations so
+# arithmetic is consistent at every level.
 def file_row:
   . as $f
-  | "<tr><td>"
-    + "<details><summary>📂 \(link_to($f.filePath; null; "<code>\($f.filePath | htmlesc)</code>"))</summary>"
+  | "<tr>"
+    + "<td>\($f.status | status_emoji)</td>"
+    + "<td>\($f.duration | ms_to_str)</td>"
+    + "<td><details><summary>📂 \(link_to($f.filePath; null; "<code>\($f.filePath | htmlesc)</code>"))</summary>"
     + "<table>"
-    + "<thead><tr><th>Scenario</th><th>Status</th><th>Duration</th></tr></thead>"
+    + "<thead><tr><th>Status</th><th>Duration</th><th>Scenario</th></tr></thead>"
     + "<tbody>"
     + ($f.tests | map(scenario_row) | join(""))
     + "</tbody></table>"
     + "</details></td>"
-    + "<td>\($f.status | status_emoji)</td>"
-    + "<td>\($f.duration | ms_to_str)</td>"
     + "</tr>";
 
 $report[0].results as $r
@@ -135,13 +157,13 @@ $report[0].results as $r
 | ($tests | group_by(.filePath // "unknown") | map({
     filePath: (.[0].filePath // "unknown"),
     tests: .,
-    duration: (map(.duration // 0) | add),
+    duration: (map(. | sum_step_durations) | add),
     status: (map(.status // "other") | rollup_status)
   })) as $files
 
 | "## \($title)\n\n"
 + "<table>"
-+ "<thead><tr><th>File / Scenario / Step</th><th>Status</th><th>Duration</th></tr></thead>"
++ "<thead><tr><th>Status</th><th>Duration</th><th>File / Scenario / Step</th></tr></thead>"
 + "<tbody>"
 + ($files | map(file_row) | join(""))
 + "</tbody></table>\n\n"

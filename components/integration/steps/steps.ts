@@ -103,3 +103,85 @@ When("a previously-broken operation runs", async function () {
     assert.fail("known pre-upgrade issue: index missing on legacy schema");
   }
 });
+
+// ── Auth feature steps ────────────────────────────────────────────────────
+
+Given("a fresh test environment", async function () {
+  await sleep(jitter(40, 80));
+});
+
+Given("the auth service is reachable", async function () {
+  await sleep(jitter(20, 50));
+});
+
+When("the user logs in with {string} credentials", async function (this: any, kind: string) {
+  await sleep(jitter(80, 200));
+  this.loginKind = kind;
+});
+
+Then("login is {string}", function (this: any, expected: string) {
+  const actual = this.loginKind === "valid" ? "successful" : "rejected";
+  assert.equal(actual, expected);
+});
+
+When("a new user signs up with email {string}", async function (_email: string) {
+  await sleep(jitter(200, 400));
+});
+
+Then("a verification email is sent", async function () {
+  await sleep(jitter(50, 100));
+});
+
+When("the user requests a password reset for {string}", async function (_email: string) {
+  await sleep(jitter(150, 300));
+});
+
+Then("a reset link is sent", async function () {
+  await sleep(jitter(30, 80));
+});
+
+Given("an authenticated session", async function () {
+  await sleep(jitter(50, 100));
+});
+
+When("the user logs out", async function () {
+  await sleep(jitter(40, 80));
+});
+
+Then("the session is invalidated", async function () {
+  await sleep(jitter(20, 60));
+});
+
+// ── Cart feature steps ────────────────────────────────────────────────────
+
+Given("a logged-in user", async function () {
+  await sleep(jitter(60, 120));
+});
+
+When(
+  "the user adds {int} {string} to the cart",
+  async function (this: any, count: number, _item: string) {
+    await sleep(jitter(40, 120));
+    this.cartCount = (this.cartCount ?? 0) + count;
+  }
+);
+
+When(
+  "the user adds {int} {string} to the cart with {int}ms latency",
+  async function (this: any, count: number, _item: string, latency: number) {
+    await sleep(latency);
+    this.cartCount = (this.cartCount ?? 0) + count;
+  }
+);
+
+When("the user applies discount code {string}", async function (_code: string) {
+  await sleep(jitter(30, 90));
+});
+
+Then("the cart contains {int} items", function (this: any, expected: number) {
+  assert.equal(this.cartCount ?? 0, expected);
+});
+
+Then("the cart total reflects the discount", async function () {
+  await sleep(jitter(20, 60));
+});

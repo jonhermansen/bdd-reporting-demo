@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "cucumber-js"
+    "test": "cucumber-js --parallel $(getconf _NPROCESSORS_ONLN)"
   },
   "devDependencies": {
     "@cucumber/cucumber": "^12.2.0",

@@ -77,6 +77,7 @@ interface AttemptRecord {
   stopMs: number;
   steps: TestStepFinished[];
   testCaseId: string;
+  workerId?: string;
 }
 
 interface PickleAccumulator {
@@ -89,7 +90,7 @@ export default class CtrfFormatter extends Formatter {
   private readonly testCaseToPickle = new Map<string, string>(); // testCaseId → pickleId
   private readonly startedToTestCase = new Map<
     string,
-    { testCaseId: string; attempt: number; startMs: number }
+    { testCaseId: string; attempt: number; startMs: number; workerId?: string }
   >(); // testCaseStartedId → info
   private readonly stepsByStarted = new Map<string, TestStepFinished[]>(); // testCaseStartedId → steps
   private readonly accumulators = new Map<string, PickleAccumulator>(); // pickleId → accumulator
@@ -115,6 +116,7 @@ export default class CtrfFormatter extends Formatter {
         testCaseId: e.testCaseStarted.testCaseId,
         attempt: e.testCaseStarted.attempt,
         startMs: tsToMs(e.testCaseStarted.timestamp),
+        workerId: e.testCaseStarted.workerId,
       });
     }
     if (e.testStepFinished) {
@@ -137,6 +139,7 @@ export default class CtrfFormatter extends Formatter {
         stopMs: tsToMs(e.testCaseFinished.timestamp),
         steps: this.stepsByStarted.get(e.testCaseFinished.testCaseStartedId) ?? [],
         testCaseId: startedInfo.testCaseId,
+        workerId: startedInfo.workerId,
       });
       this.accumulators.set(pickleId, acc);
     }
@@ -232,6 +235,7 @@ export default class CtrfFormatter extends Formatter {
     };
 
     if (line !== undefined) test.line = line;
+    if (finalAttempt.workerId !== undefined) test.threadId = finalAttempt.workerId;
 
     // Populate spec-defined `steps[]` with cucumber-rich data in `step.extra`.
     // Step.name carries the keyword + text (spec field, minimal); detail
@@ -340,6 +344,9 @@ export default class CtrfFormatter extends Formatter {
     for (const [pickleId, acc] of this.accumulators) {
       tests.push(this.buildTest(pickleId, acc));
     }
+    // Sort by start time so the report reflects execution order rather
+    // than the random completion order workers emit envelopes in.
+    tests.sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
 
     const summary = {
       tests: tests.length,

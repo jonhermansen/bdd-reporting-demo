@@ -4,6 +4,7 @@ default:
   loader: ["ts-node/esm"]
   retry: 10
   retryTagFilter: "@flaky"
+  order: "random"
   format:
     - summary
     - "junit:../../reports/integration/junit.xml"
