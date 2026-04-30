@@ -55,7 +55,9 @@ runs:
               b64="$(base64 -w0 "$png" 2>/dev/null || base64 < "$png" | tr -d '\n')"
               echo "### $name"
               echo
-              echo "<img src=\"data:image/png;base64,${b64}\" alt=\"$name\" />"
+              # Markdown image syntax with data URI — survives GitHub's
+              # sanitizer where <img src="data:..."> tags get stripped.
+              echo "![${name}](data:image/png;base64,${b64})"
               echo
             done
           } >> "$GITHUB_STEP_SUMMARY"
