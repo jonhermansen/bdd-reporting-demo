@@ -153,6 +153,46 @@ def file_row:
     + "<td>\($f.duration | ms_to_str)</td>"
     + "</tr>";
 
+# Strip characters that confuse Mermaid's gantt task parser (mostly
+# colons and brackets in scenario names).
+def gantt_safe:
+  tostring | gsub("[:|<>#\"`]"; " ") | gsub("\\s+"; " ");
+
+# Parallel-execution timeline: one swim lane per workerId, scenarios
+# rendered as bars with status-based colors. Times are normalized to
+# the earliest test start (origin = 0) so axis labels stay short.
+def parallel_gantt($tests):
+  if ($tests | length) == 0 then ""
+  else
+    ($tests | map(.start // 0) | min) as $origin
+    | "## ⏱ Parallel execution timeline\n\n"
+    + "```mermaid\n"
+    + "gantt\n"
+    + "    dateFormat x\n"
+    + "    axisFormat %S.%L\n"
+    + "    title Scenarios by worker (origin = earliest test start)\n"
+    + (
+        $tests
+        | group_by(.threadId // "single")
+        | sort_by(.[0].threadId // "")
+        | map(
+            "    section Worker \((.[0].threadId // "single") | tostring)\n"
+            + (
+                . | sort_by(.start // 0) | map(
+                  ((.start // 0) - $origin) as $start_rel
+                  | ((.stop // .start // 0) - $origin) as $stop_rel
+                  | (if .status == "failed" then "crit, "
+                     elif .status == "passed" then "done, "
+                     else "" end) as $tag
+                  | "    \(.name | gantt_safe) : \($tag)\($start_rel), \($stop_rel)\n"
+                ) | join("")
+              )
+          )
+        | join("")
+      )
+    + "```\n\n"
+  end;
+
 $report[0].results as $r
 | ($r.tests // []) as $tests
 | ($tests | group_by(.filePath // "unknown") | map({
@@ -168,3 +208,4 @@ $report[0].results as $r
 + "<tbody>"
 + ($files | map(file_row) | join(""))
 + "</tbody></table>\n\n"
++ parallel_gantt($tests)
