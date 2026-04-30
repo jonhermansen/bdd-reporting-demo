@@ -95,9 +95,19 @@ jobs:
           report: reports/integration/ctrf.post.json
           title: '🔍 Post-upgrade drilldown'
 
+      # ── Mermaid visual report: native Mermaid charts (pie, treemap,
+      # gantt, mindmap, xychart, flowchart) — all inline-renderable in
+      # GitHub markdown. Each section collapsible.
+      - name: Visual report — post-upgrade
+        if: always()
+        uses: ./.github/actions/ctrf-mermaid-report
+        with:
+          report: reports/integration/ctrf.post.json
+          title: '📊 Post-upgrade visual report'
+
       # ── Charts: hand-rolled SVG → PNG via @resvg/resvg-js. Renders
-      # a directory of images plus an index.md. Embeds in step summary
-      # via base64 data URIs and uploads as an artifact for download.
+      # to artifact (inline rendering blocked by GitHub's data-URI
+      # sanitization). Download artifact for the rich PNG charts.
       - name: Charts — post-upgrade
         if: always()
         uses: ./.github/actions/ctrf-charts

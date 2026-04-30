@@ -29,3 +29,14 @@ Feature: Shopping cart
       | spinner     | 350  |
       | slow-disk   | 800  |
       | retry-storm | 1500 |
+
+  # Multi-step scenario — exercises the per-failed-scenario flowchart
+  # in the report. Most steps pass; the payment step fails post-upgrade
+  # so the flowchart shows green-green-green-green-RED-gray.
+  @migration @checkout
+  Scenario: Checkout flow — payment fails post-upgrade
+    When the user adds 2 "widget" to the cart
+    And the user applies discount code "FLASH50"
+    And the user starts checkout
+    And the payment is processed
+    Then the order is confirmed

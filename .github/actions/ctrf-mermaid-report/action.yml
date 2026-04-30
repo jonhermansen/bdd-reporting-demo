@@ -1,0 +1,38 @@
+name: 'CTRF Mermaid report'
+description: |
+  Render a CTRF report as a series of Mermaid diagrams. Health pie,
+  slowest-scenarios bar, time-budget treemap, parallel gantt, suite
+  mindmap, and per-failed-scenario step flowchart — each in its own
+  collapsible <details> section. All native Mermaid; no PNGs, no
+  external rendering, all inline in step summary.
+
+inputs:
+  report:
+    description: 'Path to the CTRF JSON file to render'
+    required: true
+  title:
+    description: 'Top-level heading for the report'
+    required: false
+    default: '📊 Visual report'
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        REPORT: ${{ inputs.report }}
+        TITLE: ${{ inputs.title }}
+      run: |
+        set -euo pipefail
+        if [ ! -f "$REPORT" ]; then
+          echo "::error::report not found: $REPORT"
+          exit 1
+        fi
+        jq -nr \
+          --slurpfile report "$REPORT" \
+          --arg title "$TITLE" \
+          --arg server_url "${GITHUB_SERVER_URL:-}" \
+          --arg repo "${GITHUB_REPOSITORY:-}" \
+          --arg sha "${GITHUB_SHA:-}" \
+          -f "$GITHUB_ACTION_PATH/charts.jq" \
+          >> "$GITHUB_STEP_SUMMARY"

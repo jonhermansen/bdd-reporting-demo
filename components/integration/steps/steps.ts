@@ -191,3 +191,21 @@ Then("the cart contains {int} items", function (this: any, expected: number) {
 Then("the cart total reflects the discount", async function () {
   await sleep(jitter(20, 60));
 });
+
+When("the user starts checkout", async function (this: any) {
+  this.log("opening checkout flow");
+  await sleep(jitter(80, 180));
+});
+
+When("the payment is processed", async function (this: any) {
+  this.log("submitting payment to gateway");
+  await sleep(jitter(200, 500));
+  if (process.env.CTRF_SUITE === "post-upgrade") {
+    assert.fail("payment gateway returned 503 — service degradation post-upgrade");
+  }
+  this.log("payment authorized");
+});
+
+Then("the order is confirmed", async function () {
+  await sleep(jitter(40, 100));
+});
