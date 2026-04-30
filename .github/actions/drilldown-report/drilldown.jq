@@ -29,18 +29,15 @@ def htmlesc:
   | gsub("<"; "&lt;")
   | gsub(">"; "&gt;");
 
-# Wrap arbitrary text in an HTML link to a github blob URL. $line may be
-# null (file-level link) or a number. target=_blank so clicks land in a
-# new tab — bypasses the narrow Actions chrome and gives the full file
-# viewer width. Falls back to plain text when any required GitHub env
-# var is missing.
+# Wrap arbitrary text in an HTML link to a github blob URL. $line
+# defaults to 1 when null so every link consistently points at a
+# specific line (file-level links land on #L1). target=_blank so clicks
+# land in a new tab — bypasses the narrow Actions chrome and gives the
+# full file viewer width. Falls back to plain text when any required
+# GitHub env var is missing.
 def link_to($uri; $line; $text):
   if ($server_url != "" and $repo != "" and $sha != "" and $uri != null and $uri != "") then
-    if $line != null then
-      "<a href=\"\($server_url)/\($repo)/blob/\($sha)/\($uri)#L\($line)\" target=\"_blank\" rel=\"noopener\">\($text)</a>"
-    else
-      "<a href=\"\($server_url)/\($repo)/blob/\($sha)/\($uri)\" target=\"_blank\" rel=\"noopener\">\($text)</a>"
-    end
+    "<a href=\"\($server_url)/\($repo)/blob/\($sha)/\($uri)#L\($line // 1)\" target=\"_blank\" rel=\"noopener\">\($text)</a>"
   else
     $text
   end;
