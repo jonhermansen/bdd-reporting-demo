@@ -528,3 +528,258 @@ the rest. The probable order of working → not:
 - `treemap-beta` ❓ (Mermaid 11.x — depends on GitHub's pinned version)
 
 Anything that doesn't render falls back to a code block — still readable, just not pretty.
+
+---
+
+## 64-core parallel gantt experiment
+
+Synthetic data: 64 worker cores, 1-3 cucumber scenarios each, 0-3000ms total
+window. Renders the start/stop of every test in every lane so you can see
+both **execution order** (within a lane, top-to-bottom and left-to-right)
+and **parallelism** (across lanes, vertically).
+
+Will it be readable? That's what we're finding out.
+
+```mermaid
+gantt
+    title 64-core parallel test execution
+    dateFormat x
+    axisFormat %S.%L
+    section Core 01
+    Workload fast : 81, 132
+    section Core 02
+    Known issue : 64, 186
+    Schema column type : 186, 371
+    UI add : 371, 558
+    section Core 03
+    Workload medium : 97, 666
+    API create and list : 666, 706
+    Workload medium : 706, 1252
+    section Core 04
+    Known issue : 17, 100
+    UI render : 100, 333
+    section Core 05
+    Pending feature : 94, 200
+    section Core 06
+    Network jitter : 62, 232
+    Schema column type : 232, 419
+    section Core 07
+    Network jitter : 70, 180
+    API create and list : 180, 249
+    API create and list : 249, 282
+    section Core 08
+    Workload glacial : 42, 2134
+    Known issue : 2134, 2200
+    section Core 09
+    UI add : 85, 457
+    section Core 10
+    Known issue : 56, 173
+    Workload medium : 173, 439
+    Schema column type : 439, 506
+    section Core 11
+    Known issue : 68, 155
+    Pending feature : 155, 363
+    Schema column type : 363, 555
+    section Core 12
+    API create and list : 69, 141
+    Workload glacial : 141, 2247
+    section Core 13
+    Pending feature : 73, 243
+    section Core 14
+    Known issue : 0, 145
+    Network jitter : 145, 209
+    UI render : 209, 337
+    section Core 15
+    Pending feature : 6, 184
+    section Core 16
+    API create and list : 82, 124
+    section Core 17
+    Backend health check : 37, 107
+    section Core 18
+    Workload fast : 41, 83
+    Workload slow : 83, 1009
+    API create and list : 1009, 1084
+    section Core 19
+    Schema column type : 19, 213
+    section Core 20
+    Workload glacial : 3, 2361
+    Backend health check : 2361, 2435
+    section Core 21
+    Workload fast : 45, 80
+    Pending feature : 80, 314
+    section Core 22
+    Workload fast : 56, 163
+    section Core 23
+    Workload slow : 93, 1215
+    Workload glacial : 1215, 3000
+    section Core 24
+    UI render : 23, 272
+    Network jitter : 272, 481
+    Known issue : 481, 566
+    section Core 25
+    Backend health check : 10, 42
+    section Core 26
+    Network jitter : 54, 218
+    section Core 27
+    Workload glacial : 99, 2536
+    section Core 28
+    Pending feature : 35, 139
+    UI render : 139, 313
+    UI add : 313, 584
+    section Core 29
+    UI render : 47, 336
+    section Core 30
+    Backend health check : 52, 105
+    Pending feature : 105, 187
+    section Core 31
+    Backend health check : 14, 68
+    UI add : 68, 424
+    Schema column type : 424, 644
+    section Core 32
+    API create and list : 71, 123
+    section Core 33
+    Pending feature : 96, 240
+    section Core 34
+    UI add : 83, 252
+    section Core 35
+    Backend health check : 0, 89
+    Workload slow : 89, 1219
+    Workload medium : 1219, 1475
+    section Core 36
+    Backend health check : 11, 55
+    UI render : 55, 456
+    section Core 37
+    API create and list : 46, 119
+    UI add : 119, 521
+    Network jitter : 521, 582
+    section Core 38
+    Workload fast : 81, 105
+    Schema column type : 105, 244
+    UI add : 244, 347
+    section Core 39
+    Schema column type : 44, 262
+    Workload fast : 262, 352
+    UI render : 352, 678
+    section Core 40
+    UI render : 92, 379
+    section Core 41
+    Network jitter : 32, 118
+    Workload medium : 118, 377
+    Workload glacial : 377, 2750
+    section Core 42
+    Workload medium : 24, 580
+    section Core 43
+    UI add : 8, 280
+    Workload slow : 280, 1151
+    Workload fast : 1151, 1235
+    section Core 44
+    UI add : 12, 336
+    UI render : 336, 679
+    section Core 45
+    Backend health check : 3, 77
+    Workload slow : 77, 1080
+    section Core 46
+    UI add : 84, 441
+    Workload slow : 441, 1520
+    section Core 47
+    Workload medium : 23, 309
+    UI render : 309, 559
+    UI render : 559, 690
+    section Core 48
+    Workload medium : 27, 508
+    section Core 49
+    Network jitter : 85, 200
+    section Core 50
+    Pending feature : 49, 234
+    UI render : 234, 651
+    section Core 51
+    Backend health check : 59, 123
+    Workload glacial : 123, 2087
+    section Core 52
+    Schema column type : 54, 297
+    section Core 53
+    UI add : 76, 366
+    UI add : 366, 723
+    section Core 54
+    Schema column type : 0, 242
+    Backend health check : 242, 316
+    Network jitter : 316, 487
+    section Core 55
+    Workload glacial : 47, 2491
+    Schema column type : 2491, 2548
+    Workload medium : 2548, 2828
+    section Core 56
+    Workload slow : 56, 1269
+    section Core 57
+    API create and list : 97, 178
+    Known issue : 178, 425
+    section Core 58
+    Backend health check : 78, 116
+    Workload slow : 116, 1400
+    Network jitter : 1400, 1563
+    section Core 59
+    Workload slow : 8, 1137
+    section Core 60
+    Workload fast : 15, 81
+    Schema column type : 81, 274
+    section Core 61
+    Pending feature : 5, 165
+    section Core 62
+    Workload glacial : 81, 2129
+    Backend health check : 2129, 2210
+    API create and list : 2210, 2264
+    section Core 63
+    Workload slow : 56, 909
+    API create and list : 909, 960
+    section Core 64
+    API create and list : 19, 93
+    Network jitter : 93, 246
+
+```
+
+### Smaller comparison: 8-lane version
+
+For visual reference if 64 turns out too dense.
+
+```mermaid
+gantt
+    title 8-core test execution (reference)
+    dateFormat x
+    axisFormat %S.%L
+    section Core 1
+    Backend health check : 0, 38
+    Workload medium      : 38, 410
+    section Core 2
+    API create and list  : 0, 71
+    UI render timing     : 71, 480
+    section Core 3
+    UI add               : 0, 359
+    Workload fast        : 359, 412
+    section Core 4
+    Workload slow        : 0, 933
+    Network jitter       : 933, 1063
+    section Core 5
+    Workload glacial     : 0, 2300
+    section Core 6
+    Schema column type   : 0, 130
+    Known issue          : 130, 318
+    section Core 7
+    UI render timing     : 0, 432
+    section Core 8
+    Workload medium      : 0, 344
+    UI add               : 344, 700
+```
+
+### Things to look for when GitHub renders this
+
+- **Lane labels** — does the "Core 01..64" prefix render clearly on the left, or get clipped?
+- **Bar widths** — when a test is 30ms in a 3000ms window, does it become an unreadable hairline?
+- **Vertical scrolling** — 64 lanes × ~25px/row ≈ 1600px tall. Does GitHub clip at some height?
+- **Color coding** — Mermaid auto-colors; can we hint priority (regressions in red, etc.)? The default theme uses light blues which doesn't say much.
+- **Text overlap** — short test names should fit; long ones may collide with adjacent bars.
+
+### Alternatives if Mermaid gantt at this scale is unreadable
+
+- **Aggregated per-core summary** — a flat table showing "Core 01: 1.4s utilized, 3 tests" without rendering individual bars. Loses ordering but stays compact.
+- **Real timeline chart as PNG** — generate via vega-lite / observable plot / d3, embed as data URI. Pixel-perfect layout, no Mermaid limitations, but adds a build step.
+- **HTML `<canvas>` viewer published to gh-pages** — interactive zoom/pan, real flamegraph-class tooling. Heaviest lift, best UX.
