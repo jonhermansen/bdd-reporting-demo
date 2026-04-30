@@ -42,10 +42,16 @@ runs:
           exit 1
         fi
 
-        # Render markdown
+        # Render markdown. GITHUB_SERVER_URL / GITHUB_REPOSITORY /
+        # GITHUB_SHA are populated automatically inside Actions and feed
+        # blob-link generation; if unset (e.g. local dev), test names
+        # render as plain text.
         jq -nr \
           --slurpfile pre "$PRE_REPORT" \
           --slurpfile post "$POST_REPORT" \
+          --arg server_url "${GITHUB_SERVER_URL:-}" \
+          --arg repo "${GITHUB_REPOSITORY:-}" \
+          --arg sha "${GITHUB_SHA:-}" \
           -f "$GITHUB_ACTION_PATH/migration.jq" \
           >> "$GITHUB_STEP_SUMMARY"
 

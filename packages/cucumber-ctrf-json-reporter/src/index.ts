@@ -2,6 +2,8 @@ import { Formatter, IFormatterOptions } from "@cucumber/cucumber";
 import { TestStepResultStatus } from "@cucumber/messages";
 import type {
   Envelope,
+  FeatureChild,
+  GherkinDocument,
   Pickle,
   TestCase,
   TestStepFinished,
@@ -88,6 +90,7 @@ export default class CtrfFormatter extends Formatter {
   >(); // testCaseStartedId → info
   private readonly stepsByStarted = new Map<string, TestStepFinished[]>(); // testCaseStartedId → steps
   private readonly accumulators = new Map<string, PickleAccumulator>(); // pickleId → accumulator
+  private readonly astLines = new Map<string, number>(); // gherkin AST node id → line
   private runStart = 0;
   private runStop = 0;
 
@@ -98,6 +101,7 @@ export default class CtrfFormatter extends Formatter {
 
   private onEnvelope(e: Envelope): void {
     if (e.testRunStarted) this.runStart = tsToMs(e.testRunStarted.timestamp);
+    if (e.gherkinDocument) this.indexGherkinDocument(e.gherkinDocument);
     if (e.pickle) this.pickles.set(e.pickle.id, e.pickle);
     if (e.testCase) this.onTestCase(e.testCase);
     if (e.testCaseStarted) {
@@ -139,6 +143,29 @@ export default class CtrfFormatter extends Formatter {
     this.testCaseToPickle.set(tc.id, tc.pickleId);
   }
 
+  // Walk the gherkin AST and record line numbers for each scenario and
+  // (for outlines) each example row. Pickles reference these AST node
+  // ids, so we use them to populate test.line — which annotation/link
+  // tooling (github-test-reporter, our migration-report) consumes.
+  private indexGherkinDocument(doc: GherkinDocument): void {
+    if (!doc.feature) return;
+    const walk = (children: readonly FeatureChild[]): void => {
+      for (const child of children) {
+        if (child.scenario) {
+          const sc = child.scenario;
+          if (sc.location) this.astLines.set(sc.id, sc.location.line);
+          for (const ex of sc.examples ?? []) {
+            for (const row of ex.tableBody ?? []) {
+              if (row.location) this.astLines.set(row.id, row.location.line);
+            }
+          }
+        }
+        if (child.rule?.children) walk(child.rule.children);
+      }
+    };
+    walk(doc.feature.children);
+  }
+
   private buildTest(pickleId: string, acc: PickleAccumulator): Test {
     // last attempt = authoritative final result
     const sorted = [...acc.attempts].sort((a, b) => a.attempt - b.attempt);
@@ -146,6 +173,21 @@ export default class CtrfFormatter extends Formatter {
     const rollup = rollUpStatus(finalAttempt.steps);
     const finalStatus = mapStatus(rollup.status);
     const retries = sorted.length - 1;
+
+    // CTRF_FILE_PATH_PREFIX lets cucumber's pickle.uri (relative to the
+    // cucumber working directory) be promoted to a project-root-relative
+    // path so downstream link builders (github blob URLs etc.) can use
+    // it directly.
+    const pathPrefix = process.env.CTRF_FILE_PATH_PREFIX ?? "";
+    const filePath = pathPrefix
+      ? `${pathPrefix.replace(/\/+$/, "")}/${acc.pickle.uri}`
+      : acc.pickle.uri;
+
+    // Last astNodeId is the most-specific node — scenario id for plain
+    // scenarios, table-row id for Scenario Outline examples — so the
+    // line lands on the right row of an outline.
+    const lastAstId = acc.pickle.astNodeIds[acc.pickle.astNodeIds.length - 1];
+    const line = lastAstId ? this.astLines.get(lastAstId) : undefined;
 
     const test: Test = {
       name: acc.pickle.name,
@@ -157,8 +199,10 @@ export default class CtrfFormatter extends Formatter {
       flaky: finalStatus === "passed" && retries > 0,
       rawStatus: rollup.status,
       tags: acc.pickle.tags.map((t) => t.name),
-      filePath: acc.pickle.uri,
+      filePath,
     };
+
+    if (line !== undefined) test.line = line;
 
     // CTRF_SUITE lets the same scenarios run multiple times in one job
     // (e.g. pre-/post-upgrade) without colliding in the merged report.

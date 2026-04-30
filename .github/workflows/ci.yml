@@ -44,6 +44,7 @@ jobs:
         continue-on-error: true
         env:
           CTRF_SUITE: pre-upgrade
+          CTRF_FILE_PATH_PREFIX: components/integration
         run: npm run test:integration
       # Rename in its own step so cucumber's exit-1 on test failure doesn't
       # short-circuit the bash before the mv lands.
@@ -58,6 +59,7 @@ jobs:
         continue-on-error: true
         env:
           CTRF_SUITE: post-upgrade
+          CTRF_FILE_PATH_PREFIX: components/integration
         run: npm run test:integration
       - name: Stash post-upgrade CTRF
         if: always()

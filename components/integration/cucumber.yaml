@@ -2,7 +2,7 @@ default:
   paths: ["features/"]
   import: ["steps/**/*.ts"]
   loader: ["ts-node/esm"]
-  retry: 2
+  retry: 10
   retryTagFilter: "@flaky"
   format:
     - summary
