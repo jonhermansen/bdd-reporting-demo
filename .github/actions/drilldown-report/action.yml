@@ -32,5 +32,6 @@ runs:
           --arg server_url "${GITHUB_SERVER_URL:-}" \
           --arg repo "${GITHUB_REPOSITORY:-}" \
           --arg sha "${GITHUB_SHA:-}" \
+          --arg workspace "${GITHUB_WORKSPACE:-}" \
           -f "$GITHUB_ACTION_PATH/drilldown.jq" \
           >> "$GITHUB_STEP_SUMMARY"

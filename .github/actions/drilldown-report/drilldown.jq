@@ -1,11 +1,13 @@
 # Render a CTRF report as nested HTML tables with <details> drill-down.
 # Each row at every level: [Name] [Status] [Duration]. The Name cell
 # wraps a <details>; expanding it reveals the next level's table inline.
-# Steps are leaf rows (no <details>), with a Feature link column.
-# Each name (file, scenario, step) is itself a link to its source.
+# Steps are leaf rows (no <details>). Each name (file, scenario, step)
+# links to its corresponding line in the .feature file. The .ts step
+# definition source is reachable only from clickable stack-trace frames
+# inside failure detail.
 #
 # Inputs (via --slurpfile): $report (one-element array wrapping the CTRF JSON)
-# Inputs (via --arg): $title, $server_url, $repo, $sha
+# Inputs (via --arg): $title, $server_url, $repo, $sha, $workspace
 
 def ms_to_str:
   if . == null then "—"
@@ -28,22 +30,39 @@ def htmlesc:
   | gsub(">"; "&gt;");
 
 # Wrap arbitrary text in an HTML link to a github blob URL. $line may be
-# null (file-level link) or a number. Falls back to plain text when any
-# required GitHub env var is missing.
+# null (file-level link) or a number. target=_blank so clicks land in a
+# new tab — bypasses the narrow Actions chrome and gives the full file
+# viewer width. Falls back to plain text when any required GitHub env
+# var is missing.
 def link_to($uri; $line; $text):
   if ($server_url != "" and $repo != "" and $sha != "" and $uri != null and $uri != "") then
     if $line != null then
-      "<a href=\"\($server_url)/\($repo)/blob/\($sha)/\($uri)#L\($line)\">\($text)</a>"
+      "<a href=\"\($server_url)/\($repo)/blob/\($sha)/\($uri)#L\($line)\" target=\"_blank\" rel=\"noopener\">\($text)</a>"
     else
-      "<a href=\"\($server_url)/\($repo)/blob/\($sha)/\($uri)\">\($text)</a>"
+      "<a href=\"\($server_url)/\($repo)/blob/\($sha)/\($uri)\" target=\"_blank\" rel=\"noopener\">\($text)</a>"
     end
   else
     $text
   end;
 
-# Render a "uri:line" code-span link for the leaf step row's Feature cell.
-def feature_link($uri; $line):
-  link_to($uri; $line; "<code>\(($uri // "" | htmlesc)):\(($line // "—") | tostring)</code>");
+# Strip the GITHUB_WORKSPACE prefix from an absolute path so it becomes
+# repo-root-relative (suitable for github blob URLs).
+def repo_relative($p):
+  if ($workspace // "") != "" and ($p | startswith($workspace + "/")) then
+    $p | .[($workspace | length) + 1:]
+  else
+    $p
+  end;
+
+# Linkify file:// frames in a stack trace. Each "file:///path:line:col"
+# becomes a clickable github link; node-internal frames stay plain text.
+def linkify_trace:
+  if ($server_url != "" and $repo != "" and $sha != "") then
+    gsub("file://(?<path>[^\\s:)]+):(?<line>\\d+)(?::\\d+)?";
+      (repo_relative(.path)) as $rel
+      | "<a href=\"\($server_url)/\($repo)/blob/\($sha)/\($rel)#L\(.line)\" target=\"_blank\" rel=\"noopener\">\($rel):\(.line)</a>"
+    )
+  else . end;
 
 def rollup_status:
   if any(.[]; . == "failed") then "failed"
@@ -52,24 +71,24 @@ def rollup_status:
   else "other"
   end;
 
-# A leaf step row: 4 columns (Step | Status | Duration | Feature). The
-# step name itself is a link to its step-definition .ts source.
+# A leaf step row: 3 columns (Step | Status | Duration). The step name
+# is a link to the matching line in the .feature file.
 def step_row:
   . as $s
   | $s.extra as $e
   | "<tr>"
-  + "<td>\(link_to($e.definition.uri // null; $e.definition.line // null; ($s.name | htmlesc)))</td>"
+  + "<td>\(link_to($e.feature.uri // null; $e.feature.line // null; ($s.name | htmlesc)))</td>"
   + "<td>\($s.status | status_emoji)</td>"
   + "<td>\(($e.duration // 0) | ms_to_str)</td>"
-  + "<td>\(feature_link($e.feature.uri; $e.feature.line))</td>"
   + "</tr>";
 
-# Failure detail spans the full width with a <pre> message under the
-# failed step inside the same scenario table.
+# Failure detail spans the full width with a <pre> message. Stack-trace
+# frames in the message become clickable github links.
 def failure_row($t):
   ($t.steps // [] | map(select(.status == "failed"))[0]) as $f
   | if $f then
-      "<tr><td colspan=\"4\"><pre>\(($f.extra.message // $t.message // "no message") | htmlesc)</pre></td></tr>"
+      ($f.extra.message // $t.message // "no message") as $msg
+      | "<tr><td colspan=\"3\"><pre>\($msg | htmlesc | linkify_trace)</pre></td></tr>"
     else "" end;
 
 # A scenario row: name cell wraps a <details> whose body is the steps
@@ -84,7 +103,7 @@ def scenario_row:
         + (if ($t.retries // 0) > 0 then " <sub>(\($t.retries) retries)</sub>" else "" end)
         + "</summary>"
         + "<table>"
-        + "<thead><tr><th>Step</th><th>Status</th><th>Duration</th><th>Feature</th></tr></thead>"
+        + "<thead><tr><th>Step</th><th>Status</th><th>Duration</th></tr></thead>"
         + "<tbody>"
         + ($t.steps | map(step_row) | join(""))
         + failure_row($t)
