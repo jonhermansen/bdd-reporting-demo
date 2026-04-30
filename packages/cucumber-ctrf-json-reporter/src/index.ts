@@ -93,10 +93,15 @@ export default class CtrfFormatter extends Formatter {
     { testCaseId: string; attempt: number; startMs: number; workerId?: string }
   >(); // testCaseStartedId → info
   private readonly stepsByStarted = new Map<string, TestStepFinished[]>(); // testCaseStartedId → steps
+  // testCaseStartedId+testStepId → start ms; populated from testStepStarted
+  private readonly stepStartTimes = new Map<string, number>();
   private readonly accumulators = new Map<string, PickleAccumulator>(); // pickleId → accumulator
   private readonly astLines = new Map<string, number>(); // gherkin AST node id → line
   private readonly stepDefs = new Map<string, { uri: string; line: number }>(); // stepDefId → location
   private readonly testCases = new Map<string, TestCase>(); // testCaseId → TestCase (for testSteps[])
+  // attachments per (testCaseStartedId + testStepId) — text logs are captured;
+  // binary attachments are noted but not embedded.
+  private readonly stepLogs = new Map<string, string[]>();
   private runStart = 0;
   private runStop = 0;
 
@@ -119,10 +124,27 @@ export default class CtrfFormatter extends Formatter {
         workerId: e.testCaseStarted.workerId,
       });
     }
+    if (e.testStepStarted) {
+      const key = `${e.testStepStarted.testCaseStartedId}:${e.testStepStarted.testStepId}`;
+      this.stepStartTimes.set(key, tsToMs(e.testStepStarted.timestamp));
+    }
     if (e.testStepFinished) {
       const list = this.stepsByStarted.get(e.testStepFinished.testCaseStartedId) ?? [];
       list.push(e.testStepFinished);
       this.stepsByStarted.set(e.testStepFinished.testCaseStartedId, list);
+    }
+    if (e.attachment) {
+      const a = e.attachment;
+      // Only capture text logs (world.log calls). Binary content is noted
+      // by mediaType but the body is not embedded — keeps the CTRF small.
+      if (a.testCaseStartedId && a.testStepId) {
+        const key = `${a.testCaseStartedId}:${a.testStepId}`;
+        const list = this.stepLogs.get(key) ?? [];
+        if (typeof a.body === "string" && a.mediaType?.startsWith("text/")) {
+          list.push(a.body);
+        }
+        this.stepLogs.set(key, list);
+      }
     }
     if (e.testCaseFinished) {
       const startedInfo = this.startedToTestCase.get(e.testCaseFinished.testCaseStartedId);
@@ -321,6 +343,12 @@ export default class CtrfFormatter extends Formatter {
       const status = mapStatus(result.status);
       const durationMs = durToMs(result.duration);
 
+      // Per-step start/stop so renderers can sort step events globally
+      // by time (useful for parallel-mode event logs).
+      const startKey = `${finishedStep.testCaseStartedId}:${finishedStep.testStepId}`;
+      const stepStart = this.stepStartTimes.get(startKey);
+      const logs = this.stepLogs.get(startKey) ?? [];
+
       const step: Step = {
         name: keyword ? `${keyword} ${pickleStep.text}` : pickleStep.text,
         status,
@@ -328,10 +356,12 @@ export default class CtrfFormatter extends Formatter {
           keyword,
           text: pickleStep.text,
           duration: durationMs,
+          ...(stepStart !== undefined ? { start: stepStart, stop: stepStart + durationMs } : {}),
           feature: { uri: featurePath, line: featureLine },
           ...(def ? { definition: { uri: defUri, line: def.line } } : {}),
           ...(result.message ? { message: result.message } : {}),
           ...(result.exception?.stackTrace ? { trace: result.exception.stackTrace } : {}),
+          ...(logs.length > 0 ? { logs } : {}),
         },
       };
       out.push(step);

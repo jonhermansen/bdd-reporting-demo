@@ -1,0 +1,62 @@
+name: 'CTRF charts'
+description: |
+  Render a CTRF report as a directory of PNG charts plus an index.md
+  aggregating them. Hand-rolled SVG, converted to PNG by @resvg/resvg-js
+  — no browser, no Mermaid, no external service. Add new chart types by
+  extending the CHARTS array in charts.mjs.
+
+inputs:
+  report:
+    description: 'Path to the CTRF JSON file to render'
+    required: true
+  output-dir:
+    description: 'Directory to write chart images and index.md to'
+    required: true
+  embed-in-summary:
+    description: 'Append the rendered charts (as base64 data URIs) to GITHUB_STEP_SUMMARY'
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        REPORT: ${{ inputs.report }}
+        OUTPUT_DIR: ${{ inputs.output-dir }}
+        EMBED: ${{ inputs.embed-in-summary }}
+      run: |
+        set -euo pipefail
+        if [ ! -f "$REPORT" ]; then
+          echo "::error::report not found: $REPORT"
+          exit 1
+        fi
+
+        # Install deps in the action's own dir so we don't pollute the
+        # repo's node_modules.
+        cd "$GITHUB_ACTION_PATH"
+        npm install --silent --no-audit --no-fund
+
+        # Resolve relative paths against the workflow's working dir.
+        cd - > /dev/null
+        node "$GITHUB_ACTION_PATH/charts.mjs" --input "$REPORT" --output "$OUTPUT_DIR"
+
+        # Optionally embed the rendered charts in step summary using
+        # base64 data URIs so they render inline (PNG data URIs are not
+        # stripped by GitHub's markdown sanitizer).
+        if [ "$EMBED" = "true" ]; then
+          {
+            echo
+            echo "## 📊 Charts"
+            echo
+            for png in "$OUTPUT_DIR"/*.png; do
+              [ -f "$png" ] || continue
+              name="$(basename "$png" .png)"
+              b64="$(base64 -w0 "$png" 2>/dev/null || base64 < "$png" | tr -d '\n')"
+              echo "### $name"
+              echo
+              echo "<img src=\"data:image/png;base64,${b64}\" alt=\"$name\" />"
+              echo
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi

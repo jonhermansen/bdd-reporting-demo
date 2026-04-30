@@ -97,8 +97,10 @@ When("a migration-sensitive operation runs", async function () {
   }
 });
 
-When("a previously-broken operation runs", async function () {
+When("a previously-broken operation runs", async function (this: any) {
+  this.log("running migration-aware operation against current schema");
   await sleep(jitter(50, 200));
+  this.log(process.env.CTRF_SUITE === "post-upgrade" ? "schema check passed" : "schema check FAILED");
   if (process.env.CTRF_SUITE !== "post-upgrade") {
     assert.fail("known pre-upgrade issue: index missing on legacy schema");
   }
@@ -115,7 +117,9 @@ Given("the auth service is reachable", async function () {
 });
 
 When("the user logs in with {string} credentials", async function (this: any, kind: string) {
+  this.log(`POST /auth/login (kind=${kind})`);
   await sleep(jitter(80, 200));
+  this.log(kind === "valid" ? "auth token issued" : "credentials rejected");
   this.loginKind = kind;
 });
 
@@ -160,9 +164,11 @@ Given("a logged-in user", async function () {
 
 When(
   "the user adds {int} {string} to the cart",
-  async function (this: any, count: number, _item: string) {
+  async function (this: any, count: number, item: string) {
+    this.log(`POST /cart/items {item: "${item}", count: ${count}}`);
     await sleep(jitter(40, 120));
     this.cartCount = (this.cartCount ?? 0) + count;
+    this.log(`cart now has ${this.cartCount} items`);
   }
 );
 

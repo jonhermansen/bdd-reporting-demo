@@ -1,0 +1,11 @@
+{
+  "name": "ctrf-charts",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Render CTRF reports as a directory of PNG charts plus an index.md",
+  "main": "charts.mjs",
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2"
+  }
+}

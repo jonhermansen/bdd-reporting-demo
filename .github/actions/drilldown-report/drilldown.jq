@@ -158,6 +158,37 @@ def file_row:
 def gantt_safe:
   tostring | gsub("[:|<>#\"`]"; " ") | gsub("\\s+"; " ");
 
+# Treemap-safe: same idea but quotes are the Mermaid-killer here.
+def treemap_safe:
+  tostring | gsub("\""; "'");
+
+# Compact treemap of where the test budget went, grouped by feature file.
+# Each scenario is a tile sized by its duration; nested under its file.
+# treemap-beta is recent Mermaid — if GitHub's pinned version doesn't
+# support it, the block renders as a "Diagram syntax error" placeholder.
+def treemap_section($tests):
+  if ($tests | length) == 0 then ""
+  else
+    "## 🗺 Where the test budget went\n\n"
+    + "```mermaid\n"
+    + "treemap-beta\n"
+    + "\"Test execution\"\n"
+    + (
+        $tests
+        | group_by(.filePath // "unknown")
+        | map(
+            "    \"\((.[0].filePath // "unknown") | treemap_safe)\"\n"
+            + (
+                . | sort_by(-(.duration // 0)) | map(
+                  "        \"\(.name | treemap_safe)\": \((.duration // 0))\n"
+                ) | join("")
+              )
+          )
+        | join("")
+      )
+    + "```\n\n"
+  end;
+
 # Parallel-execution timeline: one swim lane per workerId, scenarios
 # rendered as bars with status-based colors. Times are normalized to
 # the earliest test start (origin = 0) so axis labels stay short.
