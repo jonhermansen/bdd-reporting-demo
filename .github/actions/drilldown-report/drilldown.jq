@@ -1,4 +1,9 @@
-# Render a CTRF report as a nested <details> drilldown.
+# Render a CTRF report as nested HTML tables with <details> drill-down.
+# Each row at every level: [Name] [Status] [Duration]. The Name cell
+# wraps a <details>; expanding it reveals the next level's table inline.
+# Steps are leaf rows (no <details>), with extra Feature / Definition
+# link columns.
+#
 # Inputs (via --slurpfile): $report (one-element array wrapping the CTRF JSON)
 # Inputs (via --arg): $title, $server_url, $repo, $sha
 
@@ -16,19 +21,24 @@ def status_emoji:
   else "❓"
   end;
 
-def safe: tostring | gsub("\n"; "<br>") | gsub("\\|"; "\\\\|");
+# HTML-escape (minimal — name fields don't typically contain special chars
+# but we hedge against pipes / angle brackets just in case).
+def htmlesc:
+  tostring
+  | gsub("&"; "&amp;")
+  | gsub("<"; "&lt;")
+  | gsub(">"; "&gt;");
 
-# Build a markdown link from uri + line, falling back to plain text.
-def link($uri; $line):
+# Build an HTML <a> tag link, or plain text fallback.
+def html_link($uri; $line):
   if ($server_url != "" and $repo != "" and $sha != "" and $uri != null and $uri != "" and $line != null) then
-    "[\($uri | tostring):\($line | tostring)](\($server_url)/\($repo)/blob/\($sha)/\($uri | tostring)#L\($line | tostring))"
+    "<a href=\"\($server_url)/\($repo)/blob/\($sha)/\($uri)#L\($line)\"><code>\($uri | htmlesc):\($line | tostring)</code></a>"
   elif $uri != null and $uri != "" then
-    "\($uri | tostring):\($line | tostring)"
+    "<code>\($uri | htmlesc):\($line | tostring)</code>"
   else
     "—"
   end;
 
-# Roll a list of test statuses into a single status by precedence.
 def rollup_status:
   if any(.[]; . == "failed") then "failed"
   elif any(.[]; . == "passed") then "passed"
@@ -36,66 +46,76 @@ def rollup_status:
   else "other"
   end;
 
-# Aggregate tests by file path → { filePath, status, duration, tests[] }
-def by_file:
-  group_by(.filePath // "unknown")
-  | map({
-      filePath: (.[0].filePath // "unknown"),
-      tests: .,
-      duration: (map(.duration // 0) | add),
-      status: (map(.status // "other") | rollup_status)
-    });
+# A leaf step row: 5 columns (Step | Status | Duration | Feature | Definition).
+def step_row:
+  . as $s
+  | $s.extra as $e
+  | "<tr>"
+  + "<td>\($s.name | htmlesc)</td>"
+  + "<td>\($s.status | status_emoji)</td>"
+  + "<td>\(($e.duration // 0) | ms_to_str)</td>"
+  + "<td>\(html_link($e.feature.uri; $e.feature.line))</td>"
+  + "<td>\(html_link($e.definition.uri // null; $e.definition.line // null))</td>"
+  + "</tr>";
+
+# A failure-detail row spans the full width with a <pre> message.
+def failure_row($t):
+  ($t.steps // [] | map(select(.status == "failed"))[0]) as $f
+  | if $f then
+      "<tr><td colspan=\"5\"><pre>\(($f.extra.message // $t.message // "no message") | htmlesc)</pre></td></tr>"
+    else "" end;
+
+# A scenario row: name cell wraps a <details> whose body is the steps table.
+# Status + duration columns sit alongside, always visible.
+def scenario_row:
+  . as $t
+  | "<tr><td>"
+    + (if (($t.steps // []) | length) > 0 then
+        "<details><summary>\($t.name | htmlesc)"
+        + (if ($t.retries // 0) > 0 then " <sub>(\($t.retries) retries)</sub>" else "" end)
+        + "</summary>"
+        + "<table>"
+        + "<thead><tr><th>Step</th><th>Status</th><th>Duration</th><th>Feature</th><th>Definition</th></tr></thead>"
+        + "<tbody>"
+        + ($t.steps | map(step_row) | join(""))
+        + failure_row($t)
+        + "</tbody></table>"
+        + "</details>"
+      else
+        ($t.name | htmlesc)
+      end)
+    + "</td>"
+    + "<td>\($t.status | status_emoji)</td>"
+    + "<td>\(($t.duration // 0) | ms_to_str)</td>"
+    + "</tr>";
+
+# A file row: name cell wraps a <details> whose body is the scenarios table.
+def file_row:
+  . as $f
+  | "<tr><td>"
+    + "<details><summary>📂 <code>\($f.filePath | htmlesc)</code></summary>"
+    + "<table>"
+    + "<thead><tr><th>Scenario</th><th>Status</th><th>Duration</th></tr></thead>"
+    + "<tbody>"
+    + ($f.tests | map(scenario_row) | join(""))
+    + "</tbody></table>"
+    + "</details></td>"
+    + "<td>\($f.status | status_emoji)</td>"
+    + "<td>\($f.duration | ms_to_str)</td>"
+    + "</tr>";
 
 $report[0].results as $r
 | ($r.tests // []) as $tests
+| ($tests | group_by(.filePath // "unknown") | map({
+    filePath: (.[0].filePath // "unknown"),
+    tests: .,
+    duration: (map(.duration // 0) | add),
+    status: (map(.status // "other") | rollup_status)
+  })) as $files
 
 | "## \($title)\n\n"
-+ "<details><summary>📋 \(($r.summary.tests // 0)) tests · "
-+ "\(($r.summary.passed // 0) | tostring) ✅ · "
-+ "\(($r.summary.failed // 0) | tostring) ❌ · "
-+ "\(($r.summary.skipped // 0) | tostring) ⏭️ · "
-+ "\((($r.summary.stop // 0) - ($r.summary.start // 0)) | ms_to_str)</summary>\n\n"
-
-# For each feature file:
-+ ($tests | by_file | map(
-    "<details><summary>\(.status | status_emoji) <code>\(.filePath | safe)</code> · "
-    + "\(.tests | length) scenarios · \(.duration | ms_to_str)</summary>\n\n"
-
-    # For each scenario in that file:
-    + (.tests | map(
-        . as $t
-        | "<details><summary>\($t.status | status_emoji) \($t.name | safe) · \(($t.duration // 0) | ms_to_str)"
-        + (if ($t.retries // 0) > 0 then " · \(.retries) retries" else "" end)
-        + "</summary>\n\n"
-
-        # Steps table (if we have step data)
-        + (if ($t.steps // []) | length > 0 then
-            "| Step | Status | Duration | Feature | Definition |\n"
-            + "|---|---|---|---|---|\n"
-            + ($t.steps | map(
-                . as $s
-                | $s.extra as $e
-                | "| \($s.name | safe) "
-                + "| \($s.status | status_emoji) "
-                + "| \(($e.duration // 0) | ms_to_str) "
-                + "| \(link($e.feature.uri; $e.feature.line)) "
-                + "| \(link($e.definition.uri // null; $e.definition.line // null)) |"
-              ) | join("\n"))
-            + "\n\n"
-          else "" end)
-
-        # Failure detail (if any step failed)
-        + (if ($t.steps // []) | any(.[]; .status == "failed") then
-            ($t.steps | map(select(.status == "failed"))[0]) as $fail
-            | "<details><summary>Failure detail</summary>\n\n"
-            + "```text\n\($fail.extra.message // $t.message // "no message")\n```\n\n"
-            + "</details>\n\n"
-          else "" end)
-
-        + "</details>\n\n"
-      ) | join(""))
-
-    + "</details>\n\n"
-  ) | join(""))
-
-+ "</details>\n\n"
++ "<table>"
++ "<thead><tr><th>File / Scenario / Step</th><th>Status</th><th>Duration</th></tr></thead>"
++ "<tbody>"
++ ($files | map(file_row) | join(""))
++ "</tbody></table>\n\n"
