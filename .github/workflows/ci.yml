@@ -77,6 +77,24 @@ jobs:
           pre-report: reports/integration/ctrf.pre.json
           post-report: reports/integration/ctrf.post.json
 
+      # ── Drilldown: per-feature, per-scenario, per-step status + timing
+      # rendered as nested <details>. Shows the full BDD trace with
+      # file:line links to .feature and step-definition source. One
+      # drilldown per phase.
+      - name: Drilldown — pre-upgrade
+        if: always()
+        uses: ./.github/actions/drilldown-report
+        with:
+          report: reports/integration/ctrf.pre.json
+          title: '🔍 Pre-upgrade drilldown'
+
+      - name: Drilldown — post-upgrade
+        if: always()
+        uses: ./.github/actions/drilldown-report
+        with:
+          report: reports/integration/ctrf.post.json
+          title: '🔍 Post-upgrade drilldown'
+
       # The two ctrf-io invocations below cover what the plugin is good
       # at: per-phase trend reports across that phase's history. Each
       # uses a distinct artifact-name so its history fetch walks only

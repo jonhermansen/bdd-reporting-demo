@@ -1,0 +1,36 @@
+name: 'Drilldown report'
+description: |
+  Render a CTRF report as a nested-<details> drilldown directly to
+  GITHUB_STEP_SUMMARY. Shows per-feature, per-scenario, per-step status
+  and timing with file:line links to source.
+
+inputs:
+  report:
+    description: 'Path to the CTRF JSON file to render'
+    required: true
+  title:
+    description: 'Heading for the drilldown section'
+    required: false
+    default: '🔍 Drilldown'
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        REPORT: ${{ inputs.report }}
+        TITLE: ${{ inputs.title }}
+      run: |
+        set -euo pipefail
+        if [ ! -f "$REPORT" ]; then
+          echo "::error::report not found: $REPORT"
+          exit 1
+        fi
+        jq -nr \
+          --slurpfile report "$REPORT" \
+          --arg title "$TITLE" \
+          --arg server_url "${GITHUB_SERVER_URL:-}" \
+          --arg repo "${GITHUB_REPOSITORY:-}" \
+          --arg sha "${GITHUB_SHA:-}" \
+          -f "$GITHUB_ACTION_PATH/drilldown.jq" \
+          >> "$GITHUB_STEP_SUMMARY"
