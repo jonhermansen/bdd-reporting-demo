@@ -51,11 +51,13 @@ def repo_relative($p):
     $p
   end;
 
-# Linkify file:// frames in a stack trace. Each "file:///path:line:col"
+# Linkify file frames in a stack trace. Matches both
+#   file:///abs/path:line:col   (Node default — no source-map mode)
+#   /abs/path:line:col          (with NODE_OPTIONS=--enable-source-maps)
 # becomes a clickable github link; node-internal frames stay plain text.
 def linkify_trace:
   if ($server_url != "" and $repo != "" and $sha != "") then
-    gsub("file://(?<path>[^\\s:)]+):(?<line>\\d+)(?::\\d+)?";
+    gsub("(?:file://)?(?<path>/[^\\s:)]+):(?<line>\\d+)(?::\\d+)?";
       (repo_relative(.path)) as $rel
       | "<a href=\"\($server_url)/\($repo)/blob/\($sha)/\($rel)#L\(.line)\" target=\"_blank\" rel=\"noopener\">\($rel):\(.line)</a>"
     )
