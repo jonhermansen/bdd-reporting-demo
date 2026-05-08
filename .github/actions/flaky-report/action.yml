@@ -1,0 +1,60 @@
+name: 'Flaky Report'
+description: 'Visualize flaky tests and parallel execution from CTRF JSON'
+
+inputs:
+  report:
+    description: 'Path to CTRF JSON'
+    required: true
+  title:
+    description: 'Report heading'
+    default: '🔍 Flaky Finder'
+  history-artifact:
+    description: 'Artifact name for cross-run history'
+    default: 'flaky-history'
+
+runs:
+  using: composite
+  steps:
+    - name: Fetch history
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ARTIFACT_NAME: ${{ inputs.history-artifact }}
+      run: |
+        mkdir -p /tmp/history
+        AID=$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${ARTIFACT_NAME}&per_page=1" \
+          --jq '.artifacts[0].id // empty' 2>/dev/null) || true
+        if [ -n "$AID" ] && [ "$AID" != "null" ]; then
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${AID}/zip" > /tmp/h.zip
+          unzip -qo /tmp/h.zip -d /tmp/history 2>/dev/null || true
+        fi
+        [ -f /tmp/history/history.json ] || echo '[]' > /tmp/history/history.json
+
+    - name: Render
+      shell: bash
+      env:
+        REPORT: ${{ inputs.report }}
+        TITLE: ${{ inputs.title }}
+      run: |
+        set -euo pipefail
+        [ -f "$REPORT" ] || { echo "::error::CTRF not found: $REPORT"; exit 1; }
+        HIST=/tmp/history/history.json
+        jq -n --slurpfile r "$REPORT" --slurpfile h "$HIST" '
+          $h[0] + [{
+            run: (($h[0] | length) + 1), date: (now | strftime("%Y-%m-%d")),
+            tests: ($r[0].results.summary.tests // 0), passed: ($r[0].results.summary.passed // 0),
+            failed: ($r[0].results.summary.failed // 0), flaky: ($r[0].results.summary.flaky // 0),
+          }]' > /tmp/history/h2.json && mv /tmp/history/h2.json "$HIST"
+        jq -nr --slurpfile report "$REPORT" --slurpfile history "$HIST" \
+          --arg title "$TITLE" \
+          --arg server_url "${GITHUB_SERVER_URL:-}" \
+          --arg repo "${GITHUB_REPOSITORY:-}" \
+          --arg sha "${GITHUB_SHA:-}" \
+          -f "$GITHUB_ACTION_PATH/report.jq" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload history
+      uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+      with:
+        name: ${{ inputs.history-artifact }}
+        path: /tmp/history/history.json
+        overwrite: true

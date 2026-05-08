@@ -1,0 +1,12 @@
+default:
+  paths: ["features/"]
+  import: ["steps/**/*.ts"]
+  loader: ["ts-node/esm"]
+  retry: 3
+  retryTagFilter: "@flaky"
+  order: "random"
+  format:
+    - summary
+    - "./reporter.mjs:reports/ctrf.json"
+  formatOptions:
+    snippetInterface: async-await

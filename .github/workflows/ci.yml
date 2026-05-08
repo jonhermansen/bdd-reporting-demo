@@ -1,0 +1,33 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  test:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Run tests
+        continue-on-error: true
+        run: npm test
+      - name: Flaky report
+        if: always()
+        uses: ./.github/actions/flaky-report
+        with:
+          report: reports/ctrf.json
+          history-artifact: flaky-history-${{ matrix.runner }}-${{ github.ref_name }}
