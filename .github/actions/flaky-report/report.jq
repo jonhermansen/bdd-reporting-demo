@@ -22,7 +22,8 @@ def gantt($tests):
   + "```mermaid\ngantt\n  dateFormat x\n  axisFormat %S.%L\n  title Workers\n"
   + ($tests | group_by(.threadId // "0") | sort_by(.[0].threadId // "")
     | map(
-      "  section W\((.[0].threadId // \"0\"))\n"
+      (.[0].threadId // "0") as $wid
+      | "  section W\($wid)\n"
       + (sort_by(.start) | map(
           (if .status == "failed" then "crit, " elif .flaky then "active, " elif .status == "passed" then "done, " else "" end) as $tag
           | "  \(.name | safe | trunc(30)) :\($tag)\((.start // 0) - $o), \((.stop // 0) - $o)\n"
