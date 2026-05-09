@@ -1,6 +1,8 @@
-Feature: Synthetic test suite
-  Every scenario has a chance of failure, controlled by
-  probability. Run with --retry to surface flaky tests.
+Feature: Chaos test suite
+  Every scenario hits a local chaos HTTP server that randomly
+  drops connections, times out, returns errors, or responds
+  slowly. Run with --retry and --parallel to surface flaky
+  tests and create interesting concurrency patterns.
 
   @flaky
   Scenario: Login flow
@@ -49,3 +51,31 @@ Feature: Synthetic test suite
     Given a service
     When cache warmup runs
     Then it completes
+
+  @flaky
+  Scenario Outline: Batch job — <batch>
+    Given a service
+    When batch <batch> runs
+    Then it completes
+
+    Examples:
+      | batch       |
+      | etl-users   |
+      | etl-orders  |
+      | etl-events  |
+      | etl-metrics |
+      | reindex     |
+      | gc-old-data |
+
+  @flaky
+  Scenario Outline: Health probe — <target>
+    Given a service
+    When health probe hits <target>
+    Then it completes
+
+    Examples:
+      | target   |
+      | postgres |
+      | redis    |
+      | kafka    |
+      | s3       |
