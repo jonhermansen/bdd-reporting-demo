@@ -25,8 +25,9 @@ runs:
         AID=$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${ARTIFACT_NAME}&per_page=1" \
           --jq '.artifacts[0].id // empty' 2>/dev/null) || true
         if [ -n "$AID" ] && [ "$AID" != "null" ]; then
-          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${AID}/zip" > /tmp/h.zip
-          unzip -qo /tmp/h.zip -d /tmp/history 2>/dev/null || true
+          if gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${AID}/zip" > /tmp/h.zip 2>/dev/null; then
+            unzip -qo /tmp/h.zip -d /tmp/history 2>/dev/null || true
+          fi
         fi
         [ -f /tmp/history/history.json ] || echo '[]' > /tmp/history/history.json
 
@@ -58,3 +59,4 @@ runs:
         name: ${{ inputs.history-artifact }}
         path: /tmp/history/history.json
         overwrite: true
+        retention-days: 400
