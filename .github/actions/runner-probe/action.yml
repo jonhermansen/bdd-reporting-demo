@@ -1,5 +1,5 @@
 name: 'Runner Probe'
-description: 'Probe host OS, CPU, and cloud metadata (Azure/AWS/GCP IMDS) for the current runner'
+description: 'Probe host OS, CPU, and IMDS metadata for the current runner'
 
 runs:
   using: composite
@@ -21,6 +21,7 @@ runs:
           if [ "$RUNNER_OS" = "Linux" ]; then
             nproc
             grep -m1 'model name' /proc/cpuinfo || true
+            grep -m1 -E 'Model|Hardware|CPU' /proc/cpuinfo || true
             free -h | head -2
           elif [ "$RUNNER_OS" = "macOS" ]; then
             sysctl -n hw.ncpu hw.physicalcpu hw.memsize machdep.cpu.brand_string
@@ -36,38 +37,46 @@ runs:
             echo '```'
           fi
 
-          echo "### Azure IMDS"
-          echo '```json'
-          RESP=$(curl -sS -m 3 -H "Metadata: true" \
-            "http://169.254.169.254/metadata/instance?api-version=2021-02-01" 2>/dev/null)
-          if [ -n "$RESP" ] && command -v jq >/dev/null && echo "$RESP" | jq . >/dev/null 2>&1; then
-            echo "$RESP" | jq '.compute | {vmSize, sku, location, zone, vmId, offer, publisher, osType, platformFaultDomain}'
-          else
-            echo "${RESP:-(no response — not on Azure or IMDS unreachable)}"
-          fi
-          echo '```'
+          echo "### IMDS"
+          # Try each known IMDS endpoint + auth combo. Print whatever answers.
+          probe_imds() {
+            local label="$1" url="$2"; shift 2
+            local resp
+            resp=$(curl -sS -m 3 "$@" "$url" 2>/dev/null)
+            if [ -n "$resp" ]; then
+              echo "#### $label — $url"
+              echo '```'
+              if command -v jq >/dev/null && echo "$resp" | jq . >/dev/null 2>&1; then
+                echo "$resp" | jq .
+              else
+                echo "$resp"
+              fi
+              echo '```'
+            fi
+          }
 
-          echo "### AWS IMDSv2"
-          echo '```'
-          TOKEN=$(curl -sS -m 3 -X PUT "http://169.254.169.254/latest/api/token" \
-            -H "X-aws-ec2-metadata-token-ttl-seconds: 60" 2>/dev/null)
+          # 169.254.169.254 — the common link-local IMDS (Azure/AWS/GCP/others)
+          probe_imds "instance metadata (Metadata: true header)" \
+            "http://169.254.169.254/metadata/instance?api-version=2021-02-01" \
+            -H "Metadata: true"
+
+          probe_imds "instance metadata (Metadata-Flavor: Google header)" \
+            "http://169.254.169.254/computeMetadata/v1/?recursive=true" \
+            -H "Metadata-Flavor: Google"
+
+          TOKEN=$(curl -sS -m 3 -X PUT \
+            -H "X-aws-ec2-metadata-token-ttl-seconds: 60" \
+            "http://169.254.169.254/latest/api/token" 2>/dev/null)
           if [ -n "$TOKEN" ]; then
-            for k in instance-type instance-id placement/availability-zone placement/region; do
-              printf '%-32s %s\n' "$k:" \
-                "$(curl -sS -m 3 -H "X-aws-ec2-metadata-token: $TOKEN" \
-                    "http://169.254.169.254/latest/meta-data/$k" 2>/dev/null || echo '(none)')"
-            done
-          else
-            echo "(no AWS IMDS token — not on AWS)"
+            probe_imds "instance metadata (token-auth)" \
+              "http://169.254.169.254/latest/dynamic/instance-identity/document" \
+              -H "X-aws-ec2-metadata-token: $TOKEN"
           fi
-          echo '```'
 
-          echo "### GCP metadata"
-          echo '```'
-          for k in instance/machine-type instance/zone project/project-id; do
-            V=$(curl -sS -m 3 -H "Metadata-Flavor: Google" \
-              "http://metadata.google.internal/computeMetadata/v1/$k" 2>/dev/null)
-            printf '%-24s %s\n' "$k:" "${V:-(none)}"
-          done
-          echo '```'
+          # 169.254.42.42 — alternate IMDS address used by some providers
+          probe_imds "instance metadata (alt endpoint)" \
+            "http://169.254.42.42/conf?format=json"
+
+          echo
+          echo "_(sections above only appear for endpoints that responded)_"
         } | tee -a "$GITHUB_STEP_SUMMARY"

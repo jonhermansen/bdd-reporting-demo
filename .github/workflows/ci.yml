@@ -20,6 +20,7 @@ jobs:
           - macos-15            # arm64 macOS (oldest supported)
           - macos-26            # arm64 macOS (latest)
           - macos-26-intel      # x86_64 macOS (latest)
+          - ubuntu-24.04-riscv  # riscv64 linux
       fail-fast: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
