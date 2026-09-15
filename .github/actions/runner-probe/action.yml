@@ -70,4 +70,4 @@ runs:
             printf '%-24s %s\n' "$k:" "${V:-(none)}"
           done
           echo '```'
-        } >> "$GITHUB_STEP_SUMMARY"
+        } | tee -a "$GITHUB_STEP_SUMMARY"
