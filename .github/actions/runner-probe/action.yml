@@ -28,6 +28,20 @@ runs:
           fi
           echo '```'
 
+          echo "### Hypervisor"
+          echo '```'
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            printf 'systemd-detect-virt: %s\n' "$(systemd-detect-virt 2>/dev/null || echo '(not available)')"
+            printf 'lscpu hypervisor:    %s\n' "$(lscpu 2>/dev/null | awk -F: '/Hypervisor vendor/{gsub(/^ +/,"",$2); print $2}')"
+            printf 'lscpu virt type:     %s\n' "$(lscpu 2>/dev/null | awk -F: '/Virtualization type/{gsub(/^ +/,"",$2); print $2}')"
+            printf 'cpuinfo hypervisor:  %s\n' "$(grep -m1 -o 'hypervisor' /proc/cpuinfo || echo '(flag not set)')"
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            printf 'kern.hv_vmm_present: %s\n' "$(sysctl -n kern.hv_vmm_present 2>/dev/null)"
+            printf 'hw.optional.vmm:     %s\n' "$(sysctl -n hw.optional.vmm 2>/dev/null)"
+            printf 'kern.osproductversion: %s\n' "$(sysctl -n kern.osproductversion 2>/dev/null)"
+          fi
+          echo '```'
+
           if [ "$RUNNER_OS" = "Linux" ]; then
             echo "### DMI"
             echo '```'
